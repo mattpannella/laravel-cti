@@ -21,7 +21,7 @@ abstract class SubtypeModel extends Model
      */
     public function save(array $options = [])
     {
-        return DB::transaction(function () use ($options) {
+        return $this->getConnection()->transaction(function () use ($options) {
             $saved = parent::save($options);
 
             if ($saved) {
@@ -46,10 +46,10 @@ abstract class SubtypeModel extends Model
 
         $data = array_intersect_key($this->getAttributes(), array_flip($this->subtypeAttributes));
 
-        if (DB::table($this->subtypeTable)->where($keyName, $key)->exists()) {
-            DB::table($this->subtypeTable)->where($keyName, $key)->update($data);
+        if ($this->getConnection()->table($this->subtypeTable)->where($keyName, $key)->exists()) {
+            $this->getConnection()->table($this->subtypeTable)->where($keyName, $key)->update($data);
         } else {
-            DB::table($this->subtypeTable)->insert(array_merge([$keyName => $key], $data));
+            $this->getConnection()->table($this->subtypeTable)->insert(array_merge([$keyName => $key], $data));
         }
     }
 
@@ -60,7 +60,7 @@ abstract class SubtypeModel extends Model
     {
         if ($this->exists && $this->subtypeTable) {
             $keyName = $this->subtypeKeyName ?? $this->getKeyName();
-            DB::table($this->subtypeTable)->where($keyName, $this->getKey())->delete();
+            $this->getConnection()->table($this->subtypeTable)->where($keyName, $this->getKey())->delete();
         }
 
         return parent::delete();
@@ -74,11 +74,10 @@ abstract class SubtypeModel extends Model
         if (!$this->subtypeTable) {
             return;
         }
-
         $keyName = $this->subtypeKeyName ?? $this->getKeyName();
         $key = $this->getKey();
 
-        $data = DB::table($this->subtypeTable)->where($keyName, $key)->first();
+        $data = $this->getConnection()->table($this->subtypeTable)->where($keyName, $key)->first();
 
         if ($data) {
             $this->forceFill((array) $data);
@@ -98,5 +97,15 @@ abstract class SubtypeModel extends Model
         }
 
         return parent::forceFill($attributes);
+    }
+
+    public function getSubtypeTable(): string
+    {
+        return $this->subtypeTable;
+    }
+
+    public function getSubtypeKeyName(): string 
+    {
+        return $this->subtypeKeyName ?? $this->getKeyName();
     }
 }
