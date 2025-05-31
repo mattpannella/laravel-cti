@@ -66,8 +66,8 @@ trait HasSubtypes
         if (!static::$subtypeLookupTable) {
             throw new \RuntimeException("Subtypes require a defined lookup table.");
         }
-
-        $type = DB::table(static::$subtypeLookupTable)
+        $instance = new static();
+        $type = $instance->getConnection()->table(static::$subtypeLookupTable)
             ->where(static::$subtypeLookupKey, $typeId)
             ->first();
 
@@ -101,7 +101,7 @@ trait HasSubtypes
             // Collect keys to query subtype data in batch
             $keys = $models->pluck($keyName)->all();
 
-            $subdata = DB::table($table)->whereIn($keyName, $keys)->get()->keyBy($keyName);
+            $subdata = $this->getConnection()->table($table)->whereIn($keyName, $keys)->get()->keyBy($keyName);
 
             foreach ($models as $model) {
                 $extra = $subdata[$model->getKey()] ?? null;
@@ -123,4 +123,15 @@ trait HasSubtypes
         $typeId = $this->{static::$subtypeKey} ?? null;
         return static::resolveSubtypeLabel($typeId);
     }
+
+    public function getSubtypeMap(): array
+    {
+        return static::$subtypeMap ?? [];
+    }
+
+    public function newCollection(array $models = [])
+    {
+        return new \Pannella\Cti\Support\SubtypedCollection($models);
+    }
+
 }
