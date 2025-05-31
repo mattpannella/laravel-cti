@@ -55,23 +55,6 @@ class Assessment extends Model
     protected static $subtypeLookupTable = 'assessment_types';
     protected static $subtypeLookupKey = 'id';
     protected static $subtypeLookupLabel = 'label';
-
-    // Common relationships
-    public function commonRelation()
-    {
-        return $this->hasMany(SomeOtherModel::class);
-    }
-
-    // Relationships for eager loading
-    public function quizSpecificRelation()
-    {
-        return $this->hasOne(AssessmentQuiz::class, 'assessment_id');
-    }
-
-    public function surveySpecificRelation()
-    {
-        return $this->hasOne(AssessmentSurvey::class, 'assessment_id');
-    }
 }
 ```
 
@@ -93,11 +76,6 @@ class AssessmentQuiz extends SubtypedModel
     ];
 
     protected $subtypeTable = 'assessment_quiz';
-
-    public function quizRelation()
-    {
-        return $this->hasMany(QuizItem::class);
-    }
 }
 ```
 
@@ -117,11 +95,6 @@ class AssessmentSurvey extends SubtypedModel
     ];
 
     protected $subtypeTable = 'assessment_survey';
-
-    public function surveyRelation()
-    {
-        return $this->hasMany(SurveyQuestion::class);
-    }
 }
 ```
 ### 4. Using the models
