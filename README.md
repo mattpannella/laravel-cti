@@ -55,6 +55,15 @@ class Assessment extends Model
     protected static $subtypeLookupTable = 'assessment_types';
     protected static $subtypeLookupKey = 'id';
     protected static $subtypeLookupLabel = 'label';
+
+    protected $fillable = [
+        'id',
+        'type_id',
+        'title',
+        'description',
+        'created_at',
+        'updated_at',
+    ];
 }
 ```
 
@@ -76,6 +85,18 @@ class AssessmentQuiz extends SubtypedModel
     ];
 
     protected $subtypeTable = 'assessment_quiz';
+
+    // Fillable includes all supertype columns + subtype-specific
+    protected $fillable = [
+        'id',
+        'type_id',
+        'title',
+        'description',
+        'created_at',
+        'updated_at',
+        'quiz_specific_field1',
+        'quiz_specific_field2',
+    ];
 }
 ```
 
@@ -95,6 +116,17 @@ class AssessmentSurvey extends SubtypedModel
     ];
 
     protected $subtypeTable = 'assessment_survey';
+
+    protected $fillable = [
+        'id',
+        'type_id',
+        'title',
+        'description',
+        'created_at',
+        'updated_at',
+        'survey_specific_field1',
+        'survey_specific_field2',
+    ];
 }
 ```
 ### 4. Using the models
