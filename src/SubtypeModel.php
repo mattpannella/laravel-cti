@@ -5,7 +5,7 @@ namespace Pannella\Cti;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 
-abstract class SubtypedModel extends Model
+abstract class SubtypeModel extends Model
 {
     // Name of the subtype table (e.g. assessment_quiz)
     protected $subtypeTable;

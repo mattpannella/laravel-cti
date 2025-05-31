@@ -5,19 +5,19 @@ namespace Pannella\Cti\Traits;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Collection;
 
+/**
+ * Trait HasSubtypes
+ *
+ * Requires the using class to define these static properties:
+ * - static::$subtypeMap (array)
+ * - static::$subtypeKey (string)
+ * - static::$subtypeLookupTable (string)
+ * - static::$subtypeLookupKey (string)
+ * - static::$subtypeLookupLabel (string)
+ */
 trait HasSubtypes
 {
-    // Map of subtype labels to model class names
-    protected static $subtypeMap = [];
-
-    // Column on parent table to discriminate subtype
-    protected static $subtypeKey = 'type_id';
-
-    // Lookup table and keys for mapping type_id to label
-    protected static $subtypeLookupTable = null;
-    protected static $subtypeLookupKey = 'id';
-    protected static $subtypeLookupLabel = 'label';
-
+    
     /**
      * Override newFromBuilder to morph base model to subtype based on type_id.
      */
