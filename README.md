@@ -207,17 +207,3 @@ assessment_survey
 4. **Schema Evolution**: Easy to add new subtypes without modifying existing tables
 5. **Data Validation**: Database-level constraints can be applied to subtype tables
 6. **Storage Efficiency**: No null columns for irrelevant attributes
-
-### Example Queries
-
-With CTI, you can write clean, efficient queries:
-
-```php
-// Get all quizzes with their specific attributes
-$quizzes = Assessment::whereHas('type', function($query) {
-    $query->where('label', 'quiz');
-})->get()->loadSubtypes();
-
-// Query using subtype-specific columns
-$hardQuizzes = AssessmentQuiz::where('difficulty_level', 'hard')->get();
-```
