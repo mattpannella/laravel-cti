@@ -4,6 +4,7 @@ namespace Pannella\Cti;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use Pannella\Cti\Exceptions\SubtypeException;
 use Pannella\Cti\Traits\HasSubtypeRelations;
 
 abstract class SubtypeModel extends Model
@@ -58,18 +59,40 @@ abstract class SubtypeModel extends Model
     protected function saveSubtypeData()
     {
         if (!$this->subtypeTable) {
-            throw new \RuntimeException("Subtype table must be defined.");
+            throw SubtypeException::missingTable();
         }
 
-        $keyName = $this->subtypeKeyName ?? $this->getKeyName();
-        $key = $this->getKey();
+        try {
+            $keyName = $this->subtypeKeyName ?? $this->getKeyName();
+            $key = $this->getKey();
 
-        $data = array_intersect_key($this->getAttributes(), array_flip($this->subtypeAttributes));
+            if (!$key) {
+                throw SubtypeException::missingTypeId(static::class);
+            }
 
-        if ($this->getConnection()->table($this->subtypeTable)->where($keyName, $key)->exists()) {
-            $this->getConnection()->table($this->subtypeTable)->where($keyName, $key)->update($data);
-        } else {
-            $this->getConnection()->table($this->subtypeTable)->insert(array_merge([$keyName => $key], $data));
+            $data = array_intersect_key($this->getAttributes(), array_flip($this->subtypeAttributes));
+
+            if ($this->getConnection()->table($this->subtypeTable)->where($keyName, $key)->exists()) {
+                $updated = $this->getConnection()->table($this->subtypeTable)
+                    ->where($keyName, $key)
+                    ->update($data);
+                
+                if ($updated === false) {
+                    throw SubtypeException::saveFailed($this->subtypeTable);
+                }
+            } else {
+                $inserted = $this->getConnection()->table($this->subtypeTable)
+                    ->insert(array_merge([$keyName => $key], $data));
+                
+                if (!$inserted) {
+                    throw SubtypeException::saveFailed($this->subtypeTable);
+                }
+            }
+        } catch (\Exception $e) {
+            if ($e instanceof SubtypeException) {
+                throw $e;
+            }
+            throw new SubtypeException("Failed to save subtype data: {$e->getMessage()}", 0, $e);
         }
     }
 
@@ -78,17 +101,35 @@ abstract class SubtypeModel extends Model
      */
     public function delete()
     {
-        if ($this->fireModelEvent('subtypeDeleting') === false) {
-            return false;
-        }
+        try {
+            if ($this->fireModelEvent('subtypeDeleting') === false) {
+                return false;
+            }
 
-        if ($this->exists && $this->subtypeTable) {
-            $keyName = $this->subtypeKeyName ?? $this->getKeyName();
-            $this->getConnection()->table($this->subtypeTable)->where($keyName, $this->getKey())->delete();
-            $this->fireModelEvent('subtypeDeleted');
-        }
+            if ($this->exists && $this->subtypeTable) {
+                $keyName = $this->subtypeKeyName ?? $this->getKeyName();
+                if (!$this->getKey()) {
+                    throw SubtypeException::missingTypeId(static::class);
+                }
 
-        return parent::delete();
+                $deleted = $this->getConnection()->table($this->subtypeTable)
+                    ->where($keyName, $this->getKey())
+                    ->delete();
+
+                if ($deleted === false) {
+                    throw new SubtypeException("Failed to delete subtype data from {$this->subtypeTable}");
+                }
+
+                $this->fireModelEvent('subtypeDeleted');
+            }
+
+            return parent::delete();
+        } catch (\Exception $e) {
+            if ($e instanceof SubtypeException) {
+                throw $e;
+            }
+            throw new SubtypeException("Failed to delete subtype: {$e->getMessage()}", 0, $e);
+        }
     }
 
     /**
@@ -97,16 +138,30 @@ abstract class SubtypeModel extends Model
     public function loadSubtypeData()
     {
         if (!$this->subtypeTable) {
-            return;
+            throw SubtypeException::missingTable();
         }
-        $keyName = $this->subtypeKeyName ?? $this->getKeyName();
-        $key = $this->getKey();
 
-        $data = $this->getConnection()->table($this->subtypeTable)->where($keyName, $key)->first();
+        try {
+            $keyName = $this->subtypeKeyName ?? $this->getKeyName();
+            $key = $this->getKey();
 
-        if ($data) {
-            $this->forceFill((array) $data);
-            $this->exists = true;
+            if (!$key) {
+                throw SubtypeException::missingTypeId(static::class);
+            }
+
+            $data = $this->getConnection()->table($this->subtypeTable)
+                ->where($keyName, $key)
+                ->first();
+
+            if ($data) {
+                $this->forceFill((array) $data);
+                $this->exists = true;
+            }
+        } catch (\Exception $e) {
+            if ($e instanceof SubtypeException) {
+                throw $e;
+            }
+            throw new SubtypeException("Failed to load subtype data: {$e->getMessage()}", 0, $e);
         }
     }
 

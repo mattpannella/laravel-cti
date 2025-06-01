@@ -2,8 +2,8 @@
 
 namespace Pannella\Cti\Traits;
 
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Collection;
+use Pannella\Cti\Exceptions\SubtypeException;
 
 /**
  * Trait HasSubtypes
@@ -64,17 +64,29 @@ trait HasSubtypes
         }
 
         if (!static::$subtypeLookupTable) {
-            throw new \RuntimeException("Subtypes require a defined lookup table.");
+            throw SubtypeException::missingLookupTable();
         }
-        $instance = new static();
-        $type = $instance->getConnection()->table(static::$subtypeLookupTable)
-            ->where(static::$subtypeLookupKey, $typeId)
-            ->first();
 
-        $label = $type->{static::$subtypeLookupLabel} ?? null;
-        $cache[$typeId] = $label;
+        try {
+            $instance = new static();
+            $type = $instance->getConnection()->table(static::$subtypeLookupTable)
+                ->where(static::$subtypeLookupKey, $typeId)
+                ->first();
 
-        return $label;
+            $label = $type->{static::$subtypeLookupLabel} ?? null;
+            
+            if (!$label) {
+                throw SubtypeException::invalidSubtype((string) $typeId);
+            }
+
+            $cache[$typeId] = $label;
+            return $label;
+        } catch (\Exception $e) {
+            if ($e instanceof SubtypeException) {
+                throw $e;
+            }
+            throw new SubtypeException("Failed to resolve subtype: {$e->getMessage()}", 0, $e);
+        }
     }
 
     /**
