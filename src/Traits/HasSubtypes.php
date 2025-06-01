@@ -154,13 +154,13 @@ trait HasSubtypes
     }
 
     /**
-     * Get the mapping of subtype labels to their corresponding class names.
+     * Get the mapping of subtype labels to their corresponding class names (instance method).
      *
      * @return array<string, string> Array of label => classname pairs
      */
     public function getSubtypeMap(): array
     {
-        return static::$subtypeMap ?? [];
+        return static::$subtypeMap ?? []; 
     }
 
     /**
@@ -172,5 +172,59 @@ trait HasSubtypes
     public function newCollection(array $models = []): SubtypedCollection
     {
         return new SubtypedCollection($models);
+    }
+
+    // New Public Static Accessors
+
+    /**
+     * Get the subtype key (discriminator column name).
+     * @return string
+     * @throws SubtypeException If not defined.
+     */
+    public function getSubtypeKey(): string
+    {
+        if (!isset(static::$subtypeKey)) {
+            throw SubtypeException::missingConfiguration(static::class, 'subtypeKey');
+        }
+        return static::$subtypeKey;
+    }
+
+    /**
+     * Get the static subtype lookup table name.
+     * @return string
+     * @throws SubtypeException If not defined.
+     */
+    public static function getSubtypeLookupTable(): string
+    {
+        if (!isset(static::$subtypeLookupTable)) {
+            throw SubtypeException::missingConfiguration(static::class, 'subtypeLookupTable');
+        }
+        return static::$subtypeLookupTable;
+    }
+
+    /**
+     * Get the static subtype lookup key name (PK in lookup table).
+     * @return string
+     * @throws SubtypeException If not defined.
+     */
+    public static function getSubtypeLookupKey(): string
+    {
+        if (!isset(static::$subtypeLookupKey)) {
+            throw SubtypeException::missingConfiguration(static::class, 'subtypeLookupKey');
+        }
+        return static::$subtypeLookupKey;
+    }
+
+    /**
+     * Get the static subtype lookup label name (label column in lookup table).
+     * @return string
+     * @throws SubtypeException If not defined.
+     */
+    public static function getSubtypeLookupLabel(): string
+    {
+        if (!isset(static::$subtypeLookupLabel)) {
+            throw SubtypeException::missingConfiguration(static::class, 'subtypeLookupLabel');
+        }
+        return static::$subtypeLookupLabel;
     }
 }

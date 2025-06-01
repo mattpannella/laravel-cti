@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Database\Query\Builder;
 use Pannella\Cti\Exceptions\SubtypeException;
 use Pannella\Cti\Traits\HasSubtypeRelations;
+use Pannella\Cti\Traits\BootsSubtypeModel;
 
 /**
  * Base class for implementing Class Table Inheritance in Laravel models.
@@ -26,6 +27,7 @@ use Pannella\Cti\Traits\HasSubtypeRelations;
 abstract class SubtypeModel extends Model
 {
     use HasSubtypeRelations;
+    use BootsSubtypeModel; // Use the new trait
 
     public const EVENT_SUBTYPE_SAVING = 'subtypeSaving';
     public const EVENT_SUBTYPE_SAVED = 'subtypeSaved';
@@ -41,6 +43,9 @@ abstract class SubtypeModel extends Model
     //optionally override if subtype PK column name differs from parent PK
     protected $subtypeKeyName;
 
+    //required to be able to create new records in the supertype table
+    protected $ctiParentClass;
+
     /**
      * The event map for the model.
      *
@@ -53,6 +58,8 @@ abstract class SubtypeModel extends Model
         'subtypeDeleted' => null,
     ];
 
+    // The boot() method is removed from here, as the trait's bootBootsSubtypeModel will be called.
+
     /**
      * Save both parent and subtype data inside a database transaction.
      *
@@ -62,16 +69,68 @@ abstract class SubtypeModel extends Model
      */
     public function save(array $options = []): bool
     {
+        // If subtypeTable is not defined, or no subtypeAttributes, treat as a normal model save.
+        if (empty($this->subtypeTable) || empty($this->subtypeAttributes)) {
+            return parent::save($options);
+        }
+
         return $this->getConnection()->transaction(function () use ($options) {
             if ($this->fireModelEvent('subtypeSaving') === false) {
                 return false;
             }
 
+            // Get all attributes currently set on the model
+            $originalAttributes = $this->getAttributes();
+            
+            // Filter out subtype-specific attributes to get only parent attributes
+            // These are the attributes that should be saved to the base/parent table.
+            // The 'type_id' should now be set by the 'creating' event listener if it was a new model.
+            $parentAttributes = array_diff_key($originalAttributes, array_flip($this->getSubtypeAttributes()));
+            
+            // Temporarily set the model's attributes to *only* parent attributes.
+            // This ensures parent::save() only attempts to save these to the base table.
+            $this->attributes = $parentAttributes;
+            
+            // Preserve the model's original "exists" status, as manipulating attributes might affect it
+            // before parent::save() correctly determines and sets it.
+            // However, parent::save() will correctly set $this->exists.
+
+            // Save the parent model data.
+            // This will handle inserting/updating the base table record and updating timestamps,
+            // auto-incrementing ID, etc., using only the $parentAttributes.
             $saved = parent::save($options);
 
+            // After parent::save(), $this->attributes will contain the state of the parent record
+            // (e.g., with ID and timestamps if it was an insert).
+            // $this->exists will also be correctly updated by parent::save().
+            $attributesAfterParentSave = $this->getAttributes();
+            $currentExistsStatus = $this->exists;
+
+            // Restore the original full set of attributes (parent + subtype) to the model.
+            // This ensures that when saveSubtypeData() is called, it has access to all subtype attributes.
+            $this->attributes = $originalAttributes;
+            
+            // Now, merge in any changes from the parent save (like the new ID or updated timestamps)
+            // back into the model's attributes. This ensures the model object is consistent.
+            foreach ($attributesAfterParentSave as $key => $value) {
+                $this->setAttribute($key, $value);
+            }
+            
+            // Restore the 'exists' status that was set by parent::save().
+            $this->exists = $currentExistsStatus;
+
             if ($saved) {
+                // Now that the parent record is saved (and we have its ID), save the subtype data.
                 $this->saveSubtypeData();
                 $this->fireModelEvent('subtypeSaved');
+            } else {
+                // If parent save failed, restore original attributes and exists status
+                // to leave the model in its pre-save state as much as possible.
+                // (The transaction will also rollback, but this keeps the model instance consistent).
+                $this->attributes = $originalAttributes;
+                // $this->exists would be false if save failed on a new model, or original state if update failed.
+                // For simplicity, we rely on the transaction to revert DB changes.
+                // The model state restoration here is for the object in memory.
             }
 
             return $saved;
