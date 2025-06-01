@@ -1,0 +1,54 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    # Add this to mark the entire workflow as required
+    if: always()
+    strategy:
+      # Add this to ensure all matrix combinations run even if one fails
+      fail-fast: false
+      matrix:
+        php: [7.4, 8.0, 8.1, 8.2]
+        laravel: [8.*, 9.*, 10.*]
+        exclude:
+          - php: 7.4
+            laravel: 10.*
+          - php: 8.0
+            laravel: 10.*
+
+    name: PHP ${{ matrix.php }} - Laravel ${{ matrix.laravel }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite
+          coverage: none
+
+      - name: Install dependencies
+        run: |
+          composer require "illuminate/database:${{ matrix.laravel }}" --no-interaction --no-update
+          composer update --prefer-dist --no-interaction --no-progress
+
+      - name: Execute tests
+        run: vendor/bin/phpunit
+
+      # Add this step at the end
+      - name: Report status
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "failure" ]; then
+            echo "Tests failed for PHP ${{ matrix.php }} - Laravel ${{ matrix.laravel }}"
+            exit 1
+          fi
