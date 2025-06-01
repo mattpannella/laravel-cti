@@ -23,8 +23,18 @@
     },
     "autoload": {
         "psr-4": {
-            "Pannella\\Cti\\": "src/"
+            "Pannella\\Cti\\": "src/",
+            "Pannella\\Cti\\Tests\\": "tests/"
         }
     },
-    "minimum-stability": "stable"
+    "minimum-stability": "stable",
+    "require-dev": {
+        "phpunit/phpunit": "^10.0",
+        "illuminate/events": "^8.0|^9.0|^10.0",
+        "illuminate/container": "^8.0|^9.0|^10.0"
+    },
+    "scripts": {
+        "test": "vendor/bin/phpunit",
+        "test-coverage": "vendor/bin/phpunit --coverage-html coverage"
+    }
 }

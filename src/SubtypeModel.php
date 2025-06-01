@@ -71,62 +71,52 @@ abstract class SubtypeModel extends Model
         if (empty($this->subtypeTable) || empty($this->subtypeAttributes)) {
             return parent::save($options);
         }
-
         return $this->getConnection()->transaction(function () use ($options) {
             if ($this->fireModelEvent('subtypeSaving') === false) {
                 return false;
             }
 
-            //get all attributes and changed attributes
-            $originalAttributes = $this->getAttributes();
+            //store original state
+            $originalAttributesArray = $this->attributes;
             $dirtyAttributes = $this->getDirty();
+
+            //split dirty attributes
+            $dirtyParentAttributes = array_intersect_key(
+                $dirtyAttributes,
+                $this->getParentAttributes()
+            );
             
-            //split dirty attributes into parent and subtype
-            $dirtyParentAttributes = array_diff_key(
+            $dirtySubtypeAttributes = array_intersect_key(
                 $dirtyAttributes, 
                 array_flip($this->getSubtypeAttributes())
             );
-            
-            //store original state
-            $originalAttributesArray = $this->attributes;
 
-            //only set parent attributes that are actually dirty
-            $this->attributes = array_merge(
-                //keep only non-subtype attributes from original state
-                array_diff_key($originalAttributesArray, array_flip($this->getSubtypeAttributes())),
-                //add only parent attributes that are dirty
-                $dirtyParentAttributes
-            );
+            //force save parent record even if only subtype attributes are dirty
+            //this ensures we have a primary key for the subtype record
+            $this->attributes = $this->getParentAttributes();
+            $saved = parent::save($options);
 
-            //save parent data if we have dirty parent attributes
-            $saved = empty($dirtyParentAttributes) || parent::save($options);
-            
             if ($saved) {
                 //get any changes from parent save
                 $parentSaveChanges = array_diff_key($this->attributes, $originalAttributesArray);
-                
+                    
                 //restore full attribute set
                 $this->attributes = array_merge(
                     $originalAttributesArray,
                     $parentSaveChanges
                 );
-                
-                //save subtype data if we have any dirty subtype attributes
-                $dirtySubtypeAttributes = array_intersect_key(
-                    $dirtyAttributes, 
-                    array_flip($this->getSubtypeAttributes())
-                );
-                
+                    
+                //save subtype data if we have any
                 if (!empty($dirtySubtypeAttributes)) {
                     $this->saveSubtypeData();
                 }
-                
-                //reload both parent and subtype data to ensure consistency
+                    
+                //reload data to ensure consistency
                 if ($this->ctiParentClass && class_exists($this->ctiParentClass)) {
                     $parentModel = (new $this->ctiParentClass)->newQuery()
                         ->where($this->getKeyName(), $this->getKey())
                         ->first();
-                    
+                        
                     if ($parentModel) {
                         foreach ($parentModel->getAttributes() as $key => $value) {
                             if (!in_array($key, $this->getSubtypeAttributes())) {
@@ -135,10 +125,8 @@ abstract class SubtypeModel extends Model
                         }
                     }
                 }
-                
-                //load fresh subtype data
+                    
                 $this->loadSubtypeData();
-                
                 $this->fireModelEvent('subtypeSaved');
             } else {
                 //restore original state if save failed
@@ -163,7 +151,7 @@ abstract class SubtypeModel extends Model
         }
 
         try {
-            //get the primary key column name. use subtype override if exists, otherwise use parent key
+            // Get the primary key column name
             $keyName = $this->subtypeKeyName ?? $this->getKeyName();
             $key = $this->getKey();
 
@@ -171,9 +159,16 @@ abstract class SubtypeModel extends Model
                 throw SubtypeException::missingTypeId(static::class);
             }
 
-            //filter model attributes to only include those designated as subtype attributes
-            //this ensures we only save relevant columns to the subtype table
+            // Filter model attributes to only include subtype attributes
             $data = array_intersect_key($this->getAttributes(), array_flip($this->subtypeAttributes));
+
+            // Validate required subtype attributes
+            $missingAttributes = array_diff($this->subtypeAttributes, array_keys($data));
+            if (!empty($missingAttributes)) {
+                throw new SubtypeException(
+                    "Failed to save subtype data: Missing required attributes: " . implode(', ', $missingAttributes)
+                );
+            }
 
             //check if a record already exists for this model in the subtype table
             if ($this->getConnection()->table($this->subtypeTable)->where($keyName, $key)->exists()) {
@@ -462,5 +457,67 @@ abstract class SubtypeModel extends Model
         }
 
         return $this;
+    }
+
+    /**
+     * Register a subtype saved event listener with the dispatcher.
+     *
+     * @param  \Closure|string  $callback
+     * @return void
+     */
+    public static function subtypeSaved($callback)
+    {
+        static::registerModelEvent('subtypeSaved', $callback);
+    }
+
+    /**
+     * Register a subtype saving event listener with the dispatcher.
+     *
+     * @param  \Closure|string  $callback
+     * @return void
+     */
+    public static function subtypeSaving($callback)
+    {
+        static::registerModelEvent('subtypeSaving', $callback);
+    }
+
+    /**
+     * Register a subtype deleting event listener with the dispatcher.
+     *
+     * @param  \Closure|string  $callback
+     * @return void
+     */
+    public static function subtypeDeleting($callback)
+    {
+        static::registerModelEvent('subtypeDeleting', $callback);
+    }
+
+    /**
+     * Register a subtype deleted event listener with the dispatcher.
+     *
+     * @param  \Closure|string  $callback
+     * @return void
+     */
+    public static function subtypeDeleted($callback)
+    {
+        static::registerModelEvent('subtypeDeleted', $callback);
+    }
+
+    /**
+     * Get parent attributes excluding subtype attributes.
+     *
+     * @return array
+     */
+    protected function getParentAttributes(): array
+    {
+        $excludeColumns = $this->subtypeAttributes;
+        if ($this->subtypeKeyName) {
+            $excludeColumns[] = $this->subtypeKeyName;
+        }
+        
+        return array_diff_key(
+            $this->getAttributes(), 
+            array_flip($excludeColumns)
+        );
     }
 }
