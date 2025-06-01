@@ -33,7 +33,7 @@ trait HasSubtypes
      * @param string|null $connection The database connection name
      * @return static|\Illuminate\Database\Eloquent\Model
      */
-    public function newFromBuilder(array $attributes = [], ?string $connection = null): static
+    public function newFromBuilder($attributes = [], $connection = null): static
     {
         $instance = parent::newFromBuilder($attributes, $connection);
 

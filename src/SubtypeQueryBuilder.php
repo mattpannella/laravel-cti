@@ -19,7 +19,7 @@ class SubtypeQueryBuilder extends Builder
      * @param string $column The column being queried
      * @return void
      */
-    protected function addSubtypeJoinIfNeeded(string $column)
+    protected function addSubtypeJoinIfNeeded($column)
     {
         $model = $this->getModel();
         
@@ -65,7 +65,7 @@ class SubtypeQueryBuilder extends Builder
      * @param string $boolean
      * @return $this
      */
-    public function where(mixed $column, mixed $operator = null, mixed $value = null, string $boolean = 'and'): self
+    public function where($column, $operator = null, $value = null, $boolean = 'and'): self
     {
         if (is_string($column)) {
             $this->addSubtypeJoinIfNeeded($column);
@@ -83,7 +83,7 @@ class SubtypeQueryBuilder extends Builder
      * @param bool $not
      * @return $this
      */
-    public function whereIn(string $column, mixed $values, string $boolean = 'and', bool $not = false): self
+    public function whereIn($column, $values, $boolean = 'and', $not = false): self
     {
         if (is_string($column)) {
             $this->addSubtypeJoinIfNeeded($column);
@@ -99,7 +99,7 @@ class SubtypeQueryBuilder extends Builder
      * @param string $direction
      * @return $this
      */
-    public function orderBy(mixed $column, string $direction = 'asc'): self
+    public function orderBy($column, $direction = 'asc'): self
     {
         if (is_string($column)) {
             $this->addSubtypeJoinIfNeeded($column);
@@ -134,7 +134,7 @@ class SubtypeQueryBuilder extends Builder
      * @param string $boolean
      * @return $this
      */
-    public function having(string $column, ?string $operator = null, ?string $value = null, string $boolean = 'and'): self
+    public function having($column, $operator = null, $value = null, $boolean = 'and'): self
     {
         if (is_string($column)) {
             $this->addSubtypeJoinIfNeeded($column);
@@ -149,7 +149,7 @@ class SubtypeQueryBuilder extends Builder
      * @param array|mixed $columns
      * @return $this
      */
-    public function select(mixed $columns = ['*']): self
+    public function select($columns = ['*']): self
     {
         $columns = is_array($columns) ? $columns : func_get_args();
         
@@ -169,7 +169,7 @@ class SubtypeQueryBuilder extends Builder
      * @param array|string $columns The columns to aggregate
      * @return mixed The result of the aggregate function
      */
-    public function aggregate(string $function, array|string $columns = ['*']): mixed
+    public function aggregate($function, $columns = ['*']): mixed
     {
         $columns = is_array($columns) ? $columns : [$columns];
         

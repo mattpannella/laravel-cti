@@ -33,13 +33,13 @@ abstract class SubtypeModel extends Model
     public const EVENT_SUBTYPE_DELETED = 'subtypeDeleted';
 
     //name of the subtype table (e.g. assessment_quiz)
-    protected ?string $subtypeTable = null;
+    protected $subtypeTable;
 
     //attributes that belong to the subtype table
-    protected array $subtypeAttributes = [];
+    protected $subtypeAttributes = [];
 
     //optionally override if subtype PK column name differs from parent PK
-    protected ?string $subtypeKeyName = null;
+    protected $subtypeKeyName;
 
     /**
      * The event map for the model.
@@ -230,7 +230,7 @@ abstract class SubtypeModel extends Model
      * @param \Illuminate\Database\Query\Builder $query
      * @return \Pannella\Cti\SubtypeQueryBuilder
      */
-    public function newEloquentBuilder(Builder $query): SubtypeQueryBuilder
+    public function newEloquentBuilder($query): SubtypeQueryBuilder
     {
         return new SubtypeQueryBuilder($query);
     }
@@ -272,7 +272,7 @@ abstract class SubtypeModel extends Model
      * @param bool $halt Whether to halt if the event returns false
      * @return mixed
      */
-    protected function fireModelEvent(string $event, bool $halt = true): mixed
+    protected function fireModelEvent($event, $halt = true): mixed
     {
         if (! isset($this->dispatchesEvents[$event])) {
             return parent::fireModelEvent($event, $halt);

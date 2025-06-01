@@ -24,22 +24,70 @@ class SubtypedCollection extends Collection
      *
      * @return \Pannella\Cti\Support\SubtypedCollection<TKey, TModel>
      */
+    
     public function loadSubtypes(): static
     {
         if ($this->isEmpty()) {
             return $this;
         }
 
-        //group models by subtype label
+        // Group models by subtype label
         $grouped = $this->groupBy(function ($model) {
             return method_exists($model, 'getSubtypeLabel') ? $model->getSubtypeLabel() : null;
         });
 
         foreach ($grouped as $label => $models) {
-            //load subtype data for each group of models
+            $first = $models->first();
+
+            if (!method_exists($first, 'getSubtypeMap')) {
+                continue;
+            }
+
+            $map = $first->getSubtypeMap();
+            $subclass = $map[$label] ?? null;
+
+            if (!$subclass) {
+                continue;
+            }
+
+            /** \Pannella\Cti\SubtypeModel $subInstance */
+            $subInstance = new $subclass;
+            $baseTable = $subInstance->getTable(); // e.g. "assessments"
+            $keyName = $subInstance->getSubtypeKeyName();
+
+            // Use subtypeTable if it exists (e.g., "assessment_quiz")
+            $subtypeTable = $subInstance->getSubtypeTable();
+
+            if (!$subtypeTable) {
+                continue;
+            }
+
+            //collect model IDs
+            $ids = $models->pluck($subInstance->getKeyName())->all();
+
+            //fetch subtype rows in bulk
+            $subdata = $subInstance->getConnection()
+                ->table($subtypeTable)
+                ->whereIn($keyName, $ids)
+                ->get()
+                ->keyBy($keyName);
+            //replace each model with hydrated subtype
             foreach ($models as $model) {
-                if (method_exists($model, 'loadSubtypeData')) {
-                    $model->loadSubtypeData();
+                $sub = (new $subclass)->newInstance([], true);
+                $sub->setRawAttributes($model->getAttributes(), true);
+                $sub->exists = true;
+
+                //preserve loaded relationships
+                $sub->setRelations($model->getRelations());
+
+                $extra = $subdata[$model->getKey()] ?? null;
+                if ($extra) {
+                    $sub->fill((array) $extra);
+                }
+
+                $index = $this->search($model, true);
+                if ($index !== false) {
+                    $this->items[$index] = $sub;
                 }
             }
         }
