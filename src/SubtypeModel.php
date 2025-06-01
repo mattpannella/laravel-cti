@@ -77,47 +77,59 @@ abstract class SubtypeModel extends Model
                 return false;
             }
 
-            //get all attributes currently set on the model
+            //get all attributes and changed attributes
             $originalAttributes = $this->getAttributes();
+            $dirtyAttributes = $this->getDirty();
             
-            //filter out subtype-specific attributes to get only parent attributes
-            $parentAttributes = array_diff_key($originalAttributes, array_flip($this->getSubtypeAttributes()));
+            //split dirty attributes into parent and subtype
+            $dirtyParentAttributes = array_diff_key(
+                $dirtyAttributes, 
+                array_flip($this->getSubtypeAttributes())
+            );
             
-            //temporarily set the model's attributes to *only* parent attributes.
-            $this->attributes = $parentAttributes;
-            
-            //save the parent model data.
-            $saved = parent::save($options);
+            //store original state
+            $originalAttributesArray = $this->attributes;
 
-            //after parent::save(), get state and exists status
-            $attributesAfterParentSave = $this->getAttributes();
-            $currentExistsStatus = $this->exists;
+            //only set parent attributes that are actually dirty
+            $this->attributes = array_merge(
+                //keep only non-subtype attributes from original state
+                array_diff_key($originalAttributesArray, array_flip($this->getSubtypeAttributes())),
+                //add only parent attributes that are dirty
+                $dirtyParentAttributes
+            );
 
-            //restore original attributes for subtype save
-            $this->attributes = $originalAttributes;
+            //save parent data if we have dirty parent attributes
+            $saved = empty($dirtyParentAttributes) || parent::save($options);
             
-            //merge in parent save changes
-            foreach ($attributesAfterParentSave as $key => $value) {
-                $this->setAttribute($key, $value);
-            }
-            
-            $this->exists = $currentExistsStatus;
-
             if ($saved) {
-                //save the subtype data
-                $this->saveSubtypeData();
+                //get any changes from parent save
+                $parentSaveChanges = array_diff_key($this->attributes, $originalAttributesArray);
                 
-                //now refresh both parent and subtype data
+                //restore full attribute set
+                $this->attributes = array_merge(
+                    $originalAttributesArray,
+                    $parentSaveChanges
+                );
+                
+                //save subtype data if we have any dirty subtype attributes
+                $dirtySubtypeAttributes = array_intersect_key(
+                    $dirtyAttributes, 
+                    array_flip($this->getSubtypeAttributes())
+                );
+                
+                if (!empty($dirtySubtypeAttributes)) {
+                    $this->saveSubtypeData();
+                }
+                
+                //reload both parent and subtype data to ensure consistency
                 if ($this->ctiParentClass && class_exists($this->ctiParentClass)) {
-                    //get a fresh parent model instance
                     $parentModel = (new $this->ctiParentClass)->newQuery()
                         ->where($this->getKeyName(), $this->getKey())
                         ->first();
                     
                     if ($parentModel) {
-                        //merge parent attributes into this model
                         foreach ($parentModel->getAttributes() as $key => $value) {
-                            if (!in_array($key, $this->subtypeAttributes)) {
+                            if (!in_array($key, $this->getSubtypeAttributes())) {
                                 $this->setAttribute($key, $value);
                             }
                         }
@@ -130,7 +142,7 @@ abstract class SubtypeModel extends Model
                 $this->fireModelEvent('subtypeSaved');
             } else {
                 //restore original state if save failed
-                $this->attributes = $originalAttributes;
+                $this->attributes = $originalAttributesArray;
             }
 
             return $saved;
