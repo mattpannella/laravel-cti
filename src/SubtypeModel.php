@@ -4,9 +4,25 @@ namespace Pannella\Cti;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Database\Query\Builder;
 use Pannella\Cti\Exceptions\SubtypeException;
 use Pannella\Cti\Traits\HasSubtypeRelations;
 
+/**
+ * Base class for implementing Class Table Inheritance in Laravel models.
+ * 
+ * This abstract class extends Laravel's Model to support storing model data
+ * across multiple tables in a class table inheritance pattern. The base/parent
+ * class data is stored in one table while subtype-specific data is stored in
+ * separate tables.
+ *
+ * @property string $subtypeTable Name of the table containing subtype-specific data
+ * @property array $subtypeAttributes List of attributes that belong to the subtype table
+ * @property string|null $subtypeKeyName Foreign key column name in subtype table
+ *
+ * @method bool save(array $options = []) Save both parent and subtype data
+ * @method bool delete() Delete both parent and subtype data
+ */
 abstract class SubtypeModel extends Model
 {
     use HasSubtypeRelations;
@@ -33,9 +49,13 @@ abstract class SubtypeModel extends Model
     ];
 
     /**
-     * Save parent model and subtype data inside a transaction.
+     * Save both parent and subtype data inside a database transaction.
+     *
+     * @param array $options Save options passed to parent save method
+     * @return bool Whether the save was successful
+     * @throws SubtypeException When saving subtype data fails
      */
-    public function save(array $options = [])
+    public function save(array $options = []): bool
     {
         return $this->getConnection()->transaction(function () use ($options) {
             if ($this->fireModelEvent('subtypeSaving') === false) {
@@ -54,9 +74,13 @@ abstract class SubtypeModel extends Model
     }
 
     /**
-     * Save subtype table data, insert or update as needed.
+     * Save subtype-specific data to the subtype table.
+     * Will perform an insert or update depending on if the record exists.
+     *
+     * @throws SubtypeException When subtype table is not defined or save fails
+     * @return void
      */
-    protected function saveSubtypeData()
+    protected function saveSubtypeData(): void
     {
         if (!$this->subtypeTable) {
             throw SubtypeException::missingTable();
@@ -97,9 +121,13 @@ abstract class SubtypeModel extends Model
     }
 
     /**
-     * Delete subtype row first, then parent row.
+     * Delete both subtype and parent data.
+     * Deletes subtype data first, then parent data to maintain referential integrity.
+     *
+     * @throws SubtypeException When deletion fails
+     * @return bool Whether the deletion was successful
      */
-    public function delete()
+    public function delete(): bool
     {
         try {
             if ($this->fireModelEvent('subtypeDeleting') === false) {
@@ -133,7 +161,10 @@ abstract class SubtypeModel extends Model
     }
 
     /**
-     * Load subtype data for this model from the subtype table.
+     * Load subtype-specific data from the subtype table.
+     *
+     * @throws SubtypeException When loading fails or required data is missing
+     * @return void
      */
     public function loadSubtypeData()
     {
@@ -166,9 +197,12 @@ abstract class SubtypeModel extends Model
     }
 
     /**
-     * Override forceFill to ensure subtype attributes are set.
+     * Force fill attributes, ensuring subtype attributes are properly set.
+     *
+     * @param array $attributes Attributes to fill
+     * @return $this
      */
-    public function forceFill(array $attributes)
+    public function forceFill(array $attributes): self
     {
         foreach ($attributes as $key => $value) {
             if (in_array($key, $this->subtypeAttributes)) {
@@ -181,25 +215,40 @@ abstract class SubtypeModel extends Model
 
     /**
      * Create a new Eloquent query builder for the model.
+     *
+     * @param \Illuminate\Database\Query\Builder $query
+     * @return \Pannella\Cti\SubtypeQueryBuilder
      */
-    public function newEloquentBuilder($query)
+    public function newEloquentBuilder(Builder $query): SubtypeQueryBuilder
     {
         return new SubtypeQueryBuilder($query);
     }
 
     /**
-     * Get the subtype attributes
+     * Get the list of attributes that belong to the subtype table.
+     *
+     * @return array
      */
     public function getSubtypeAttributes(): array
     {
         return $this->subtypeAttributes;
     }
 
+    /**
+     * Get the name of the subtype table.
+     *
+     * @return string
+     */
     public function getSubtypeTable(): string
     {
         return $this->subtypeTable;
     }
 
+    /**
+     * Get the primary key column name used in the subtype table.
+     *
+     * @return string
+     */
     public function getSubtypeKeyName(): string 
     {
         return $this->subtypeKeyName ?? $this->getKeyName();
@@ -207,8 +256,12 @@ abstract class SubtypeModel extends Model
 
     /**
      * Fire a model event with the given name.
+     *
+     * @param string $event Name of the event
+     * @param bool $halt Whether to halt if the event returns false
+     * @return mixed
      */
-    protected function fireModelEvent($event, $halt = true)
+    protected function fireModelEvent(string $event, bool $halt = true): mixed
     {
         if (! isset($this->dispatchesEvents[$event])) {
             return parent::fireModelEvent($event, $halt);
