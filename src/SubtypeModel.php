@@ -127,6 +127,8 @@ abstract class SubtypeModel extends Model
                 }
                     
                 $this->loadSubtypeData();
+                //sync original attributes after loading all data
+                $this->syncOriginal();
                 $this->fireModelEvent('subtypeSaved');
             } else {
                 //restore original state if save failed

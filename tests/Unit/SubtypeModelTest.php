@@ -10,6 +10,7 @@ use Illuminate\Container\Container;
 use Pannella\Cti\Tests\Fixtures\Assessment;
 use Pannella\Cti\Tests\Fixtures\Quiz;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Collection;
 
 class SubtypeModelTest extends TestCase
 {
@@ -432,5 +433,171 @@ class SubtypeModelTest extends TestCase
         $this->assertNotNull($quiz->id);
         $this->assertEquals('Mass Assigned Quiz', $quiz->title);
         $this->assertEquals(70, $quiz->passing_score);
+    }
+
+    /**
+     * Test that accessing undefined attributes returns null
+     */
+    public function testUndefinedAttributesReturnsNull(): void
+    {
+        $quiz = new Quiz();
+        $this->assertNull($quiz->nonexistent_attribute);
+    }
+
+    /**
+     * Test subtype casting with eager loading
+     */
+    public function testEagerLoading(): void
+    {
+        $this->createQuizRecord(
+            [
+                'id' => 1,
+                'title' => 'Quiz 1',
+                'type_id' => 1
+            ],
+            [
+                'assessment_id' => 1,
+                'passing_score' => 70
+            ]
+        );
+        
+        $this->createQuizRecord(
+            [
+                'id' => 2,
+                'title' => 'Quiz 2',
+                'type_id' => 1
+            ],
+            [
+                'assessment_id' => 2,
+                'passing_score' => 80
+            ]
+        );
+        
+        // Load multiple records at once
+        $quizzes = Quiz::where('type_id', 1)->get();
+        
+        $this->assertCount(2, $quizzes);
+        foreach ($quizzes as $quiz) {
+            $this->assertInstanceOf(Quiz::class, $quiz);
+            $this->assertTrue(isset($quiz->passing_score));
+        }
+    }
+
+    /**
+     * Test invalid type_id handling
+     */
+    public function testInvalidTypeId(): void
+    {
+        // Insert a new type_id that doesn't exist in our lookup map
+        DB::table('assessment_type')->insert([
+            'id' => 999,
+            'label' => 'invalid_type'
+        ]);
+
+        DB::table('assessment')->insert([
+            'id' => 1,
+            'type_id' => 999,
+            'title' => 'Invalid Quiz'
+        ]);
+
+        $assessment = Assessment::find(1);
+        
+        $result = $assessment->loadSubtypes();
+        
+        $this->assertInstanceOf(Collection::class, $result);
+        $this->assertEquals('Invalid Quiz', $assessment->title);
+        //verify no subtype attributes were added
+        $this->assertFalse(isset($assessment->passing_score));
+    }
+
+    /**
+     * Test dirty attributes tracking
+     */
+    public function testDirtyAttributesTracking(): void
+    {
+        $quiz = new Quiz();
+        
+        // Set initial attributes
+        $quiz->title = 'Test Quiz';
+        $quiz->passing_score = 70;
+        $this->assertTrue($quiz->isDirty());
+        
+        // Save to clear dirty state
+        $quiz->save();
+        $this->assertFalse($quiz->isDirty());
+        
+        // Modify only parent attribute
+        $quiz->title = 'Updated Quiz';
+        $this->assertTrue($quiz->isDirty('title'));
+        $this->assertFalse($quiz->isDirty('passing_score'));
+        
+        // Modify only subtype attribute
+        $quiz->title = 'Updated Quiz';  // Reset to remove dirty state
+        $quiz->save();
+        
+        $quiz->passing_score = 80;
+        $this->assertFalse($quiz->isDirty('title'));
+        $this->assertTrue($quiz->isDirty('passing_score'));
+    }
+
+    /**
+     * Test that primary keys are properly handled
+     */
+    public function testPrimaryKeyHandling(): void
+    {
+        $quiz = new Quiz();
+        $quiz->title = 'Test Quiz';
+        $quiz->passing_score = 70;
+        $quiz->save();
+        
+        $this->assertNotNull($quiz->id);
+        $this->assertEquals($quiz->id, $quiz->getKey());
+        
+        // Check that subtype table uses the same ID
+        $subtypeRecord = DB::table('assessment_quiz')
+            ->where('assessment_id', $quiz->id)
+            ->first();
+        $this->assertNotNull($subtypeRecord);
+    }
+
+    /**
+     * Test that timestamps are properly handled
+     */
+    public function testTimestampHandling(): void
+    {
+        $quiz = new Quiz();
+        $quiz->title = 'Test Quiz';
+        $quiz->passing_score = 70;
+        $quiz->save();
+        
+        $this->assertNotNull($quiz->created_at);
+        $this->assertNotNull($quiz->updated_at);
+        
+        $originalUpdatedAt = $quiz->updated_at;
+        sleep(1); // Ensure timestamp will be different
+        
+        $quiz->title = 'Updated Quiz';
+        $quiz->save();
+        
+        $this->assertNotEquals($originalUpdatedAt, $quiz->updated_at);
+    }
+
+    /**
+     * Test that fillable attributes are respected
+     */
+    public function testFillableProtection(): void
+    {
+        $data = [
+            'title' => 'Test Quiz',
+            'passing_score' => 70,
+            'non_fillable_field' => 'should not be set'
+        ];
+        
+        $quiz = new Quiz();
+        $quiz->fill($data);
+        
+        $this->assertEquals('Test Quiz', $quiz->title);
+        $this->assertEquals(70, $quiz->passing_score);
+        $this->assertNull($quiz->non_fillable_field);
     }
 }
