@@ -67,7 +67,7 @@ abstract class SubtypeModel extends Model
      */
     public function save(array $options = []): bool
     {
-        // If subtypeTable is not defined, or no subtypeAttributes, treat as a normal model save.
+        //if subtypeTable is not defined, or no subtypeAttributes, treat as a normal model save.
         if (empty($this->subtypeTable) || empty($this->subtypeAttributes)) {
             return parent::save($options);
         }
@@ -104,10 +104,10 @@ abstract class SubtypeModel extends Model
             $this->exists = $currentExistsStatus;
 
             if ($saved) {
+                //save the subtype data
                 $this->saveSubtypeData();
                 
-                //now refresh the entire model to get all attributes
-                //this will load both parent and subtype attributes
+                //now refresh both parent and subtype data
                 if ($this->ctiParentClass && class_exists($this->ctiParentClass)) {
                     //get a fresh parent model instance
                     $parentModel = (new $this->ctiParentClass)->newQuery()
@@ -123,6 +123,9 @@ abstract class SubtypeModel extends Model
                         }
                     }
                 }
+                
+                //load fresh subtype data
+                $this->loadSubtypeData();
                 
                 $this->fireModelEvent('subtypeSaved');
             } else {
@@ -337,5 +340,115 @@ abstract class SubtypeModel extends Model
         $method = $halt ? 'until' : 'dispatch';
 
         return static::$dispatcher->{$method}(new $this->dispatchesEvents[$event]($this));
+    }
+
+    /**
+     * Create a new instance of the given model.
+     *
+     * @param array $attributes
+     * @param bool $exists
+     * @return static
+     */
+    public function newInstance($attributes = [], $exists = false)
+    {
+        //get the normal new instance
+        $instance = parent::newInstance($attributes, $exists);
+
+        //if this is an existing record, load its subtype data
+        if ($exists && $instance->getKey()) {
+            $instance->loadSubtypeData();
+        }
+
+        return $instance;
+    }
+
+    /**
+     * Create a new model instance that is existing.
+     * Overridden to ensure subtype data is loaded.
+     *
+     * @param array $attributes
+     * @param string|null $connection
+     * @return static
+     */
+    public function newFromBuilder($attributes = [], $connection = null)
+    {
+        $instance = parent::newFromBuilder($attributes, $connection);
+        
+        //load subtype data for single model instances
+        if ($instance->exists && $instance->getKey()) {
+            $instance->loadSubtypeData();
+        }
+
+        return $instance;
+    }
+
+    /**
+     * Create a new instance of the model being queried.
+     * Overridden to ensure subtype configuration is preserved.
+     *
+     * @param array $attributes
+     * @return static
+     */
+    public function newModelInstance($attributes = [])
+    {
+        $model = parent::newModelInstance($attributes);
+
+        //if we're copying an existing model's data, load its subtype data
+        if (!empty($attributes) && isset($attributes[$this->getKeyName()])) {
+            $model->loadSubtypeData();
+        }
+
+        return $model;
+    }
+
+    /**
+     * Create a copy of the model.
+     *
+     * @param array|null $except
+     * @return static
+     */
+    public function replicate(array $except = null)
+    {
+        //ensure the subtype foreign key is in the $except array
+        if (!$except) {
+            $except = [];
+        }
+        
+        //add the subtype's foreign key to $except
+        $subtypeKeyName = $this->getSubtypeKeyName();
+        if (!in_array($subtypeKeyName, $except)) {
+            $except[] = $subtypeKeyName;
+        }
+
+        //get base model replica
+        $instance = parent::replicate($except);
+
+        //copy subtype attributes except those in $except
+        $subtypeAttributes = array_diff($this->getSubtypeAttributes(), $except);
+        foreach ($subtypeAttributes as $attribute) {
+            //skip the foreign key column
+            if ($attribute !== $subtypeKeyName) {
+                $instance->setAttribute($attribute, $this->getAttribute($attribute));
+            }
+        }
+
+        return $instance;
+    }
+
+    /**
+     * Reload the current model instance with fresh attributes from the database.
+     *
+     * @return $this
+     */
+    public function refresh()
+    {
+        parent::refresh();
+
+        //after refreshing parent data, reload subtype data
+        if ($this->exists) {
+            $this->loadSubtypeData();
+        }
+
+        return $this;
     }
 }
