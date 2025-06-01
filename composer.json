@@ -19,7 +19,7 @@
     ],
     "require": {
         "php": "^8.0",
-        "illuminate/database": "^8.0|^9.0|^10.0"
+        "illuminate/database": ">=8.0 <13.0"
     },
     "autoload": {
         "psr-4": {
@@ -30,8 +30,8 @@
     "minimum-stability": "stable",
     "require-dev": {
         "phpunit/phpunit": "^9.0",
-        "illuminate/events": "^8.0|^9.0|^10.0|^11.0|^12.0",
-        "illuminate/container": "^8.0|^9.0|^10.0|^11.0|^12.0"
+        "illuminate/events": ">=8.0 <13.0",
+        "illuminate/container": ">=8.0 <13.0"
     },
     "scripts": {
         "test": "vendor/bin/phpunit",
