@@ -173,6 +173,20 @@ assessment
   title
   created_at
   updated_at
+
+quiz
+  id
+  difficulty_level
+  time_limit
+  created_at
+  updated_at
+
+survey
+  id
+  response_type
+  allow_anonymous
+  created_at
+  updated_at
 ```
 
 With CTI:
@@ -189,12 +203,12 @@ assessment_type
   label -- 'quiz', 'survey', etc.
 
 assessment_quiz
-  assessment_id -- Foreign key to assessment
+  assessment_id -- Foreign key to assessments
   difficulty_level
   time_limit
 
 assessment_survey
-  assessment_id -- Foreign key to assessment
+  assessment_id -- Foreign key to assessments
   response_type
   allow_anonymous
 ```
@@ -207,3 +221,21 @@ assessment_survey
 4. **Schema Evolution**: Easy to add new subtypes without modifying existing tables
 5. **Data Validation**: Database-level constraints can be applied to subtype tables
 6. **Storage Efficiency**: No null columns for irrelevant attributes
+
+### Database Normalization Issues with morphTo
+
+Laravel's polymorphic relationships break several database normalization rules:
+
+1. **First Normal Form (1NF)**
+   - The `*_type` column stores multiple types of values (class names as strings)
+   - This violates atomic value requirements of 1NF
+   - Example: `assessmentable_type` could be 'App\Models\Quiz' or 'App\Models\Survey'
+
+2. **Second Normal Form (2NF)**
+   - The combination of `*_type` and `*_id` creates a composite key with partial dependencies
+   - The same ID could refer to different records depending on the type
+   - This creates potential referential integrity issues
+
+With CTI, we maintain proper normalization by:
+- Having clear foreign key relationships
+- Ensuring each attribute depends on the full primary key
