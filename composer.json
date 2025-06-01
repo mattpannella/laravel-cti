@@ -3,6 +3,14 @@
     "description": "A Laravel package for Class Table Inheritance support with automatic subtype casting.",
     "type": "library",
     "license": "MIT",
+    "homepage": "https://github.com/mattpannella/laravel-cti",
+    "keywords": [
+        "laravel",
+        "cti",
+        "class table inheritance",
+        "subtype casting"
+    ],
+    "version": "1.0.0",
     "authors": [
         {
             "name": "Matt Pannella",
@@ -16,11 +24,6 @@
     "autoload": {
         "psr-4": {
             "Pannella\\Cti\\": "src/"
-        }
-    },
-    "extra": {
-        "laravel": {
-            "providers": []
         }
     },
     "minimum-stability": "stable"
