@@ -99,6 +99,22 @@ abstract class SubtypeModel extends Model
         return parent::forceFill($attributes);
     }
 
+    /**
+     * Create a new Eloquent query builder for the model.
+     */
+    public function newEloquentBuilder($query)
+    {
+        return new SubtypeQueryBuilder($query);
+    }
+
+    /**
+     * Get the subtype attributes
+     */
+    public function getSubtypeAttributes(): array
+    {
+        return $this->subtypeAttributes;
+    }
+
     public function getSubtypeTable(): string
     {
         return $this->subtypeTable;
