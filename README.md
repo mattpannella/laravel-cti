@@ -154,3 +154,71 @@ $quiz->title = 'Sample Quiz';
 $quiz->quiz_specific_column_1 = 'Example value';
 $quiz->save();
 ```
+
+## Why Use CTI Instead of Polymorphic Relations?
+
+### Database Normalization
+Unlike Laravel's `morphTo` relationships which store type information in separate columns (`*_type`, `*_id`), CTI follows proper database normalization principles:
+
+- Each entity type has its own dedicated table
+- Foreign keys maintain referential integrity
+- No string-based type identifiers in the database
+- Type information is stored in a lookup table
+
+For example, with `morphTo`:
+```sql
+assessments
+  id
+  assessmentable_id
+  assessmentable_type -- Stores full class names as strings
+  title
+  created_at
+  updated_at
+```
+
+With CTI:
+```sql
+assessments
+  id
+  type_id -- Foreign key to assessment_types
+  title
+  created_at
+  updated_at
+
+assessment_types
+  id
+  label -- 'quiz', 'survey', etc.
+
+assessment_quiz
+  assessment_id -- Foreign key to assessments
+  difficulty_level
+  time_limit
+
+assessment_survey
+  assessment_id -- Foreign key to assessments
+  response_type
+  allow_anonymous
+```
+
+### Benefits of CTI
+
+1. **Referential Integrity**: Foreign key constraints ensure data consistency
+2. **Type Safety**: Types are defined in the database, not as strings in code
+3. **Query Performance**: Joins are more efficient than polymorphic queries
+4. **Schema Evolution**: Easy to add new subtypes without modifying existing tables
+5. **Data Validation**: Database-level constraints can be applied to subtype tables
+6. **Storage Efficiency**: No null columns for irrelevant attributes
+
+### Example Queries
+
+With CTI, you can write clean, efficient queries:
+
+```php
+// Get all quizzes with their specific attributes
+$quizzes = Assessment::whereHas('type', function($query) {
+    $query->where('label', 'quiz');
+})->get()->loadSubtypes();
+
+// Query using subtype-specific columns
+$hardQuizzes = AssessmentQuiz::where('difficulty_level', 'hard')->get();
+```
