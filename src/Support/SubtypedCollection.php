@@ -22,7 +22,7 @@ class SubtypedCollection extends Collection
      * Groups models by subtype and loads their subtype-specific data
      * efficiently using as few queries as possible.
      *
-     * @return static
+     * @return \Pannella\Cti\Support\SubtypedCollection<TKey, TModel>
      */
     public function loadSubtypes(): static
     {

@@ -27,14 +27,19 @@ abstract class SubtypeModel extends Model
 {
     use HasSubtypeRelations;
 
+    public const EVENT_SUBTYPE_SAVING = 'subtypeSaving';
+    public const EVENT_SUBTYPE_SAVED = 'subtypeSaved';
+    public const EVENT_SUBTYPE_DELETING = 'subtypeDeleting';
+    public const EVENT_SUBTYPE_DELETED = 'subtypeDeleted';
+
     // Name of the subtype table (e.g. assessment_quiz)
-    protected $subtypeTable;
+    protected ?string $subtypeTable = null;
 
     // Attributes that belong to the subtype table
-    protected $subtypeAttributes = [];
+    protected array $subtypeAttributes = [];
 
     // Optionally override if subtype PK column name differs from parent PK
-    protected $subtypeKeyName;
+    protected ?string $subtypeKeyName = null;
 
     /**
      * The event map for the model.
@@ -166,7 +171,7 @@ abstract class SubtypeModel extends Model
      * @throws SubtypeException When loading fails or required data is missing
      * @return void
      */
-    public function loadSubtypeData()
+    public function loadSubtypeData(): void
     {
         if (!$this->subtypeTable) {
             throw SubtypeException::missingTable();
@@ -237,9 +242,9 @@ abstract class SubtypeModel extends Model
     /**
      * Get the name of the subtype table.
      *
-     * @return string
+     * @return ?string
      */
-    public function getSubtypeTable(): string
+    public function getSubtypeTable(): ?string
     {
         return $this->subtypeTable;
     }
