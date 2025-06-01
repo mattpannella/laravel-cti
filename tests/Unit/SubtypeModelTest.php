@@ -417,25 +417,6 @@ class SubtypeModelTest extends TestCase
     }
 
     /**
-     * Test error cases
-     */
-    public function testErrorCases(): void 
-    {
-        // Test missing required subtype attribute
-        $quiz = new Quiz();
-        $quiz->title = 'Test Quiz';
-        // Only save subtype data to trigger validation
-        $quiz->time_limit = 60;
-        $quiz->show_correct_answers = true;
-        // Missing required passing_score
-        
-        $this->expectException(\Pannella\Cti\Exceptions\SubtypeException::class);
-        $this->expectExceptionMessage('Missing required attributes: passing_score');
-        
-        $quiz->save();
-    }
-
-    /**
      * Test mass assignment
      */
     public function testMassAssignment(): void

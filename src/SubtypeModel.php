@@ -162,14 +162,6 @@ abstract class SubtypeModel extends Model
             // Filter model attributes to only include subtype attributes
             $data = array_intersect_key($this->getAttributes(), array_flip($this->subtypeAttributes));
 
-            // Validate required subtype attributes
-            $missingAttributes = array_diff($this->subtypeAttributes, array_keys($data));
-            if (!empty($missingAttributes)) {
-                throw new SubtypeException(
-                    "Failed to save subtype data: Missing required attributes: " . implode(', ', $missingAttributes)
-                );
-            }
-
             //check if a record already exists for this model in the subtype table
             if ($this->getConnection()->table($this->subtypeTable)->where($keyName, $key)->exists()) {
                 $updated = $this->getConnection()->table($this->subtypeTable)
