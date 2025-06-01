@@ -8,9 +8,8 @@ This package provides a simple and generic way to implement Class Table Inherita
 
 - Automatic morphing of supertype models into appropriate subtype models based on a type discriminator column.
 - Seamless saving and updating of both supertype and subtype data.
-- Shared relationships can be defined in a common trait, simplifying eager loading.
+- Support for Eloquent model events
 - Designed to work with normalized database schemas where subtype tables store additional fields.
-- Compatible with Laravel's Eloquent ORM.
 
 ---
 
@@ -26,8 +25,8 @@ composer require pannella/laravel-cti
 
 ### Database Tables Example
 
-- `assessments` (id, type_id, title, created_at, updated_at)
-- `assessment_types` (id, label) — e.g. label = 'quiz' or 'survey'
+- `assessment` (id, type_id, title, created_at, updated_at)
+- `assessment_type` (id, label) — e.g. label = 'quiz' or 'survey'
 - `assessment_quiz` (assessment_id, quiz_specific_column_1, quiz_specific_column_2)
 - `assessment_survey` (assessment_id, survey_specific_column_1, survey_specific_column_2)
 
@@ -167,7 +166,7 @@ Unlike Laravel's `morphTo` relationships which store type information in separat
 
 For example, with `morphTo`:
 ```sql
-assessments
+assessment
   id
   assessmentable_id
   assessmentable_type -- Stores full class names as strings
@@ -178,24 +177,24 @@ assessments
 
 With CTI:
 ```sql
-assessments
+assessment
   id
-  type_id -- Foreign key to assessment_types
+  type_id -- Foreign key to assessment_type
   title
   created_at
   updated_at
 
-assessment_types
+assessment_type
   id
   label -- 'quiz', 'survey', etc.
 
 assessment_quiz
-  assessment_id -- Foreign key to assessments
+  assessment_id -- Foreign key to assessment
   difficulty_level
   time_limit
 
 assessment_survey
-  assessment_id -- Foreign key to assessments
+  assessment_id -- Foreign key to assessment
   response_type
   allow_anonymous
 ```
