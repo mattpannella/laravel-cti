@@ -4,9 +4,12 @@ namespace Pannella\Cti;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use Pannella\Cti\Traits\HasSubtypeRelations;
 
 abstract class SubtypeModel extends Model
 {
+    use HasSubtypeRelations;
+
     // Name of the subtype table (e.g. assessment_quiz)
     protected $subtypeTable;
 
@@ -17,15 +20,32 @@ abstract class SubtypeModel extends Model
     protected $subtypeKeyName;
 
     /**
+     * The event map for the model.
+     *
+     * @var array
+     */
+    protected $dispatchesEvents = [
+        'subtypeSaving' => null,
+        'subtypeSaved' => null,
+        'subtypeDeleting' => null,
+        'subtypeDeleted' => null,
+    ];
+
+    /**
      * Save parent model and subtype data inside a transaction.
      */
     public function save(array $options = [])
     {
         return $this->getConnection()->transaction(function () use ($options) {
+            if ($this->fireModelEvent('subtypeSaving') === false) {
+                return false;
+            }
+
             $saved = parent::save($options);
 
             if ($saved) {
                 $this->saveSubtypeData();
+                $this->fireModelEvent('subtypeSaved');
             }
 
             return $saved;
@@ -58,9 +78,14 @@ abstract class SubtypeModel extends Model
      */
     public function delete()
     {
+        if ($this->fireModelEvent('subtypeDeleting') === false) {
+            return false;
+        }
+
         if ($this->exists && $this->subtypeTable) {
             $keyName = $this->subtypeKeyName ?? $this->getKeyName();
             $this->getConnection()->table($this->subtypeTable)->where($keyName, $this->getKey())->delete();
+            $this->fireModelEvent('subtypeDeleted');
         }
 
         return parent::delete();
@@ -123,5 +148,19 @@ abstract class SubtypeModel extends Model
     public function getSubtypeKeyName(): string 
     {
         return $this->subtypeKeyName ?? $this->getKeyName();
+    }
+
+    /**
+     * Fire a model event with the given name.
+     */
+    protected function fireModelEvent($event, $halt = true)
+    {
+        if (! isset($this->dispatchesEvents[$event])) {
+            return parent::fireModelEvent($event, $halt);
+        }
+
+        $method = $halt ? 'until' : 'dispatch';
+
+        return static::$dispatcher->{$method}(new $this->dispatchesEvents[$event]($this));
     }
 }
