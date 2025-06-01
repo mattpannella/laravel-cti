@@ -32,13 +32,13 @@ abstract class SubtypeModel extends Model
     public const EVENT_SUBTYPE_DELETING = 'subtypeDeleting';
     public const EVENT_SUBTYPE_DELETED = 'subtypeDeleted';
 
-    // Name of the subtype table (e.g. assessment_quiz)
+    //name of the subtype table (e.g. assessment_quiz)
     protected ?string $subtypeTable = null;
 
-    // Attributes that belong to the subtype table
+    //attributes that belong to the subtype table
     protected array $subtypeAttributes = [];
 
-    // Optionally override if subtype PK column name differs from parent PK
+    //optionally override if subtype PK column name differs from parent PK
     protected ?string $subtypeKeyName = null;
 
     /**
@@ -92,6 +92,7 @@ abstract class SubtypeModel extends Model
         }
 
         try {
+            //get the primary key column name. use subtype override if exists, otherwise use parent key
             $keyName = $this->subtypeKeyName ?? $this->getKeyName();
             $key = $this->getKey();
 
@@ -99,8 +100,11 @@ abstract class SubtypeModel extends Model
                 throw SubtypeException::missingTypeId(static::class);
             }
 
+            //filter model attributes to only include those designated as subtype attributes
+            //this ensures we only save relevant columns to the subtype table
             $data = array_intersect_key($this->getAttributes(), array_flip($this->subtypeAttributes));
 
+            //check if a record already exists for this model in the subtype table
             if ($this->getConnection()->table($this->subtypeTable)->where($keyName, $key)->exists()) {
                 $updated = $this->getConnection()->table($this->subtypeTable)
                     ->where($keyName, $key)
@@ -110,6 +114,8 @@ abstract class SubtypeModel extends Model
                     throw SubtypeException::saveFailed($this->subtypeTable);
                 }
             } else {
+                //insert a new record
+                //merge the primary key into the data array to maintain the relationship
                 $inserted = $this->getConnection()->table($this->subtypeTable)
                     ->insert(array_merge([$keyName => $key], $data));
                 

@@ -35,7 +35,6 @@ trait HasSubtypes
      */
     public function newFromBuilder(array $attributes = [], ?string $connection = null): static
     {
-        // First, create base model instance
         $instance = parent::newFromBuilder($attributes, $connection);
 
         $typeId = data_get($attributes, static::$subtypeKey);
@@ -43,12 +42,11 @@ trait HasSubtypes
         $subclass = $label ? static::$subtypeMap[$label] ?? null : null;
 
         if ($subclass && is_subclass_of($subclass, static::class)) {
-            // Instantiate subtype and fill raw attributes
+            //instantiate subtype and fill raw attributes
             $sub = (new $subclass)->newInstance([], true);
             $sub->setRawAttributes((array) $attributes, true);
             $sub->exists = true;
 
-            // Optionally load subtype data here if you want full eager loading
             if (method_exists($sub, 'loadSubtypeData')) {
                 $sub->loadSubtypeData();
             }
@@ -112,22 +110,24 @@ trait HasSubtypes
      */
     public function loadSubtypes(): Collection
     {
-        // Support both a Collection or single model instance
+        //support both a Collection or single model instance
         $collection = $this instanceof Collection ? $this : collect([$this]);
 
-        // Group models by their subtype label
+        //group models by their subtype label, so we can eager load subtype data in batches
         $grouped = $collection->groupBy(fn ($model) => $model->getSubtypeLabel());
 
         foreach ($grouped as $label => $models) {
             $class = static::$subtypeMap[$label] ?? null;
-            if (!$class) continue;
+            if (!$class) {
+                continue;
+            }
 
             $instance = new $class;
 
             $table = $instance->getTable();
             $keyName = $instance->getKeyName();
 
-            // Collect keys to query subtype data in batch
+            //collect keys to query subtype data in batch
             $keys = $models->pluck($keyName)->all();
 
             $subdata = $this->getConnection()->table($table)->whereIn($keyName, $keys)->get()->keyBy($keyName);
@@ -135,7 +135,7 @@ trait HasSubtypes
             foreach ($models as $model) {
                 $extra = $subdata[$model->getKey()] ?? null;
                 if ($extra) {
-                    // Merge subtype attributes into the model
+                    //merge subtype attributes into the model
                     $model->fill((array) $extra);
                 }
             }

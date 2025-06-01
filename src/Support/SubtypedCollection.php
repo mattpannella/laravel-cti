@@ -30,13 +30,13 @@ class SubtypedCollection extends Collection
             return $this;
         }
 
-        // Group models by subtype label
+        //group models by subtype label
         $grouped = $this->groupBy(function ($model) {
             return method_exists($model, 'getSubtypeLabel') ? $model->getSubtypeLabel() : null;
         });
 
         foreach ($grouped as $label => $models) {
-            // Load subtype data for each group of models
+            //load subtype data for each group of models
             foreach ($models as $model) {
                 if (method_exists($model, 'loadSubtypeData')) {
                     $model->loadSubtypeData();
