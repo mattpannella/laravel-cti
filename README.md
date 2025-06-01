@@ -1,38 +1,24 @@
 # Laravel Class Table Inheritance (CTI) Package
 
-This package provides a simple and generic way to implement Class Table Inheritance (CTI) in Laravel Eloquent models, allowing you to model a supertype and multiple subtypes stored in separate database tables.
-
----
+A Laravel package for implementing Class Table Inheritance pattern with Eloquent models. Unlike Laravel's polymorphic relations which denormalize data, CTI maintains proper database normalization by storing shared attributes in a parent table and subtype-specific attributes in separate tables.
 
 ## Features
 
-- Automatic morphing of supertype models into appropriate subtype models based on a type discriminator column.
-- Seamless saving and updating of both supertype and subtype data.
-- Support for Eloquent model events
-- Designed to work with normalized database schemas where subtype tables store additional fields.
-
----
+- Automatic model type resolution and instantiation
+- Seamless saving/updating across parent and subtype tables
+- Efficient bulk loading of subtype data
+- Support for Eloquent events and relationships
+- Full type safety and referential integrity
 
 ## Installation
-
-Require this package via Composer:
 
 ```bash
 composer require pannella/laravel-cti
 ```
 
-## Example Usage
+## Usage
 
-### Database Tables Example
-
-- `assessment` (id, type_id, title, created_at, updated_at)
-- `assessment_type` (id, label) — e.g. label = 'quiz' or 'survey'
-- `assessment_quiz` (assessment_id, quiz_specific_column_1, quiz_specific_column_2)
-- `assessment_survey` (assessment_id, survey_specific_column_1, survey_specific_column_2)
-
----
-
-### 1. The Supertype Model: `Assessment.php`
+### 1. Parent Model
 
 ```php
 namespace App\Models;
@@ -50,192 +36,75 @@ class Assessment extends Model
     ];
 
     protected static $subtypeKey = 'type_id';
-
     protected static $subtypeLookupTable = 'assessment_types';
     protected static $subtypeLookupKey = 'id';
     protected static $subtypeLookupLabel = 'label';
-
-    protected $fillable = [
-        'id',
-        'type_id',
-        'title',
-        'description',
-        'created_at',
-        'updated_at',
-    ];
 }
 ```
 
-### 2. Subtype Models
+### 2. Subtype Model
 
-`AssessmentQuiz.php`
 ```php
 namespace App\Models;
 
-use Pannella\Cti\SubtypedModel;
+use Pannella\Cti\SubtypeModel;
 
-class AssessmentQuiz extends SubtypedModel
+class Quiz extends SubtypeModel
 {
-    protected $table = 'assessment_quiz';
-
-    protected $subtypeAttributes = [
-        'quiz_specific_column_1',
-        'quiz_specific_column_2',
-    ];
-
     protected $subtypeTable = 'assessment_quiz';
-
-    // Fillable includes all supertype columns + subtype-specific
-    protected $fillable = [
-        'id',
-        'type_id',
-        'title',
-        'description',
-        'created_at',
-        'updated_at',
-        'quiz_specific_field1',
-        'quiz_specific_field2',
-    ];
-}
-```
-
-`AssessmentSurvey.php`
-```php
-namespace App\Models;
-
-use Pannella\Cti\SubtypedModel;
-
-class AssessmentSurvey extends SubtypedModel
-{
-    protected $table = 'assessment_survey';
-
     protected $subtypeAttributes = [
-        'survey_specific_column_1',
-        'survey_specific_column_2',
+        'passing_score',
+        'time_limit',
+        'show_correct_answers'
     ];
-
-    protected $subtypeTable = 'assessment_survey';
-
-    protected $fillable = [
-        'id',
-        'type_id',
-        'title',
-        'description',
-        'created_at',
-        'updated_at',
-        'survey_specific_field1',
-        'survey_specific_field2',
-    ];
+    
+    protected $ctiParentClass = Assessment::class;
 }
 ```
-### 4. Using the models
-```php
-use App\Models\Assessment;
 
-// Fetch all assessments with subtype data hydrated
+### 3. Using the Models
+
+```php
+// Fetch with automatic subtype resolution
 $assessments = Assessment::all()->loadSubtypes();
 
-foreach ($assessments as $assessment) {
-    echo get_class($assessment) . ": ID {$assessment->id}" . PHP_EOL;
+// Create new subtype instance
+$quiz = new Quiz();
+$quiz->title = 'Final Exam';        // parent attribute
+$quiz->passing_score = 80;          // subtype attribute
+$quiz->save();                      // saves to both tables
 
-    if ($assessment instanceof AssessmentQuiz) {
-        echo "Quiz Column 1: " . $assessment->quiz_specific_column_1 . PHP_EOL;
-    }
+// Load single instance
+$quiz = Quiz::find(1);             // hydrates both parent and subtype data
 
-    if ($assessment instanceof AssessmentSurvey) {
-        echo "Survey Column 1: " . $assessment->survey_specific_column_1 . PHP_EOL;
-    }
-}
+// Update existing
+$quiz->time_limit = 60;
+$quiz->save();                     // updates only modified tables
 
-// Creating a new quiz assessment
-$quiz = new AssessmentQuiz();
-$quiz->title = 'Sample Quiz';
-$quiz->quiz_specific_column_1 = 'Example value';
-$quiz->save();
+// Query using subtype attributes
+$quizzes = Quiz::where('passing_score', '>', 70)->get();
 ```
 
-## Why Use CTI Instead of Polymorphic Relations?
+## Configuration
 
-### Database Normalization
-Unlike Laravel's `morphTo` relationships which store type information in separate columns (`*_type`, `*_id`), CTI follows proper database normalization principles:
+### Required Parent Model Properties
 
-- Each entity type has its own dedicated table
-- Foreign keys maintain referential integrity
-- No string-based type identifiers in the database
-- Type information is stored in a lookup table
+| Property | Description |
+|----------|-------------|
+| `$subtypeMap` | Maps type labels to subtype class names |
+| `$subtypeKey` | Foreign key to type lookup table |
+| `$subtypeLookupTable` | Table containing type definitions |
+| `$subtypeLookupKey` | Primary key in lookup table |
+| `$subtypeLookupLabel` | Type label column in lookup table |
 
-For example, with `morphTo`:
-```sql
-assessment
-  id
-  assessmentable_id
-  assessmentable_type -- Stores full class names as strings
-  title
-  created_at
-  updated_at
+### Required Subtype Model Properties
 
-quiz
-  id
-  difficulty_level
-  time_limit
-  created_at
-  updated_at
+| Property | Description |
+|----------|-------------|
+| `$subtypeTable` | Table containing subtype-specific fields |
+| `$subtypeAttributes` | List of subtype-specific column names |
+| `$ctiParentClass` | FQCN of parent model class |
 
-survey
-  id
-  response_type
-  allow_anonymous
-  created_at
-  updated_at
-```
+## License
 
-With CTI:
-```sql
-assessment
-  id
-  type_id -- Foreign key to assessment_type
-  title
-  created_at
-  updated_at
-
-assessment_type
-  id
-  label -- 'quiz', 'survey', etc.
-
-assessment_quiz
-  assessment_id -- Foreign key to assessments
-  difficulty_level
-  time_limit
-
-assessment_survey
-  assessment_id -- Foreign key to assessments
-  response_type
-  allow_anonymous
-```
-
-### Benefits of CTI
-
-1. **Referential Integrity**: Foreign key constraints ensure data consistency
-2. **Type Safety**: Types are defined in the database, not as strings in code
-3. **Query Performance**: Joins are more efficient than polymorphic queries
-4. **Schema Evolution**: Easy to add new subtypes without modifying existing tables
-5. **Data Validation**: Database-level constraints can be applied to subtype tables
-6. **Storage Efficiency**: No null columns for irrelevant attributes
-
-### Database Normalization Issues with morphTo
-
-Laravel's polymorphic relationships break several database normalization rules:
-
-1. **First Normal Form (1NF)**
-   - The `*_type` column stores multiple types of values (class names as strings)
-   - This violates atomic value requirements of 1NF
-   - Example: `assessmentable_type` could be 'App\Models\Quiz' or 'App\Models\Survey'
-
-2. **Second Normal Form (2NF)**
-   - The combination of `*_type` and `*_id` creates a composite key with partial dependencies
-   - The same ID could refer to different records depending on the type
-   - This creates potential referential integrity issues
-
-With CTI, we maintain proper normalization by:
-- Having clear foreign key relationships
-- Ensuring each attribute depends on the full primary key
+MIT
