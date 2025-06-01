@@ -8,9 +8,8 @@ This package provides a simple and generic way to implement Class Table Inherita
 
 - Automatic morphing of supertype models into appropriate subtype models based on a type discriminator column.
 - Seamless saving and updating of both supertype and subtype data.
-- Shared relationships can be defined in a common trait, simplifying eager loading.
+- Support for Eloquent model events
 - Designed to work with normalized database schemas where subtype tables store additional fields.
-- Compatible with Laravel's Eloquent ORM.
 
 ---
 
@@ -26,8 +25,8 @@ composer require pannella/laravel-cti
 
 ### Database Tables Example
 
-- `assessments` (id, type_id, title, created_at, updated_at)
-- `assessment_types` (id, label) — e.g. label = 'quiz' or 'survey'
+- `assessment` (id, type_id, title, created_at, updated_at)
+- `assessment_type` (id, label) — e.g. label = 'quiz' or 'survey'
 - `assessment_quiz` (assessment_id, quiz_specific_column_1, quiz_specific_column_2)
 - `assessment_survey` (assessment_id, survey_specific_column_1, survey_specific_column_2)
 
@@ -56,22 +55,14 @@ class Assessment extends Model
     protected static $subtypeLookupKey = 'id';
     protected static $subtypeLookupLabel = 'label';
 
-    // Common relationships
-    public function commonRelation()
-    {
-        return $this->hasMany(SomeOtherModel::class);
-    }
-
-    // Relationships for eager loading
-    public function quizSpecificRelation()
-    {
-        return $this->hasOne(AssessmentQuiz::class, 'assessment_id');
-    }
-
-    public function surveySpecificRelation()
-    {
-        return $this->hasOne(AssessmentSurvey::class, 'assessment_id');
-    }
+    protected $fillable = [
+        'id',
+        'type_id',
+        'title',
+        'description',
+        'created_at',
+        'updated_at',
+    ];
 }
 ```
 
@@ -94,10 +85,17 @@ class AssessmentQuiz extends SubtypedModel
 
     protected $subtypeTable = 'assessment_quiz';
 
-    public function quizRelation()
-    {
-        return $this->hasMany(QuizItem::class);
-    }
+    // Fillable includes all supertype columns + subtype-specific
+    protected $fillable = [
+        'id',
+        'type_id',
+        'title',
+        'description',
+        'created_at',
+        'updated_at',
+        'quiz_specific_field1',
+        'quiz_specific_field2',
+    ];
 }
 ```
 
@@ -118,10 +116,16 @@ class AssessmentSurvey extends SubtypedModel
 
     protected $subtypeTable = 'assessment_survey';
 
-    public function surveyRelation()
-    {
-        return $this->hasMany(SurveyQuestion::class);
-    }
+    protected $fillable = [
+        'id',
+        'type_id',
+        'title',
+        'description',
+        'created_at',
+        'updated_at',
+        'survey_specific_field1',
+        'survey_specific_field2',
+    ];
 }
 ```
 ### 4. Using the models
@@ -149,3 +153,89 @@ $quiz->title = 'Sample Quiz';
 $quiz->quiz_specific_column_1 = 'Example value';
 $quiz->save();
 ```
+
+## Why Use CTI Instead of Polymorphic Relations?
+
+### Database Normalization
+Unlike Laravel's `morphTo` relationships which store type information in separate columns (`*_type`, `*_id`), CTI follows proper database normalization principles:
+
+- Each entity type has its own dedicated table
+- Foreign keys maintain referential integrity
+- No string-based type identifiers in the database
+- Type information is stored in a lookup table
+
+For example, with `morphTo`:
+```sql
+assessment
+  id
+  assessmentable_id
+  assessmentable_type -- Stores full class names as strings
+  title
+  created_at
+  updated_at
+
+quiz
+  id
+  difficulty_level
+  time_limit
+  created_at
+  updated_at
+
+survey
+  id
+  response_type
+  allow_anonymous
+  created_at
+  updated_at
+```
+
+With CTI:
+```sql
+assessment
+  id
+  type_id -- Foreign key to assessment_type
+  title
+  created_at
+  updated_at
+
+assessment_type
+  id
+  label -- 'quiz', 'survey', etc.
+
+assessment_quiz
+  assessment_id -- Foreign key to assessments
+  difficulty_level
+  time_limit
+
+assessment_survey
+  assessment_id -- Foreign key to assessments
+  response_type
+  allow_anonymous
+```
+
+### Benefits of CTI
+
+1. **Referential Integrity**: Foreign key constraints ensure data consistency
+2. **Type Safety**: Types are defined in the database, not as strings in code
+3. **Query Performance**: Joins are more efficient than polymorphic queries
+4. **Schema Evolution**: Easy to add new subtypes without modifying existing tables
+5. **Data Validation**: Database-level constraints can be applied to subtype tables
+6. **Storage Efficiency**: No null columns for irrelevant attributes
+
+### Database Normalization Issues with morphTo
+
+Laravel's polymorphic relationships break several database normalization rules:
+
+1. **First Normal Form (1NF)**
+   - The `*_type` column stores multiple types of values (class names as strings)
+   - This violates atomic value requirements of 1NF
+   - Example: `assessmentable_type` could be 'App\Models\Quiz' or 'App\Models\Survey'
+
+2. **Second Normal Form (2NF)**
+   - The combination of `*_type` and `*_id` creates a composite key with partial dependencies
+   - The same ID could refer to different records depending on the type
+   - This creates potential referential integrity issues
+
+With CTI, we maintain proper normalization by:
+- Having clear foreign key relationships
+- Ensuring each attribute depends on the full primary key
