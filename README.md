@@ -134,7 +134,7 @@ class Quiz extends SubtypeModel
 |----------|-------------|
 | `$table` | **Must** be set to the parent table name (e.g. `assessments`) |
 | `$subtypeTable` | Table containing this subtype's specific fields |
-| `$subtypeAttributes` | Array of column names that belong to the subtype table |
+| `$subtypeAttributes` | Array of column names that belong to the subtype table. **Must not overlap with parent table columns.** |
 | `$ctiParentClass` | Fully-qualified class name of the parent model |
 | `$subtypeKeyName` | *(Optional)* Foreign key column in the subtype table. Defaults to the parent model's primary key name (`id`) |
 | `$fillable` | Should include both parent and subtype attributes |
@@ -354,6 +354,10 @@ Both the parent model (via `HasSubtypes`) and subtype models (via `SubtypeModel`
 ### Cast Inheritance
 
 Parent model casts are automatically merged into subtype instances. If `Assessment` defines `'type_id' => 'integer'`, that cast is applied when a `Quiz` is instantiated.
+
+### Column Overlap Validation
+
+`$subtypeAttributes` must not contain any column names that also exist on the parent table. Overlapping columns break save, load, query, and replicate operations in subtle ways. The package validates this automatically on the first `save()` or `loadSubtypeData()` call for each model class (one schema query per class, cached for the lifetime of the request). If an overlap is detected, a `SubtypeException` is thrown immediately with a clear message listing the conflicting columns.
 
 ### Transactions
 
