@@ -34,4 +34,13 @@ class Assessment extends Model
     protected static $subtypeLookupTable = 'assessment_type';
     protected static $subtypeLookupKey = 'id';
     protected static $subtypeLookupLabel = 'label';
+
+    /**
+     * Parent relationship: Assessment has many tags.
+     * This relationship should be accessible from subtype models like Quiz.
+     */
+    public function tags()
+    {
+        return $this->hasMany(AssessmentTag::class, 'assessment_id');
+    }
 }

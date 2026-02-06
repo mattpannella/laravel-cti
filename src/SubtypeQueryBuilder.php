@@ -117,6 +117,72 @@ class SubtypeQueryBuilder extends Builder
     }
 
     /**
+     * Add a "where null" clause to the query, handling subtype columns.
+     *
+     * @param string|array<mixed> $columns
+     * @param string $boolean
+     * @param bool $not
+     * @return $this
+     */
+    public function whereNull($columns, $boolean = 'and', $not = false): self
+    {
+        $cols = is_array($columns) ? $columns : [$columns];
+
+        foreach ($cols as $column) {
+            if (is_string($column)) {
+                $this->addSubtypeJoinIfNeeded($column);
+            }
+        }
+
+        /** @phpstan-ignore-next-line */
+        return parent::whereNull($columns, $boolean, $not);
+    }
+
+    /**
+     * Add a "where not null" clause to the query, handling subtype columns.
+     *
+     * @param string|array<mixed> $columns
+     * @param string $boolean
+     * @return $this
+     */
+    public function whereNotNull($columns, $boolean = 'and'): self
+    {
+        $cols = is_array($columns) ? $columns : [$columns];
+
+        foreach ($cols as $column) {
+            if (is_string($column)) {
+                $this->addSubtypeJoinIfNeeded($column);
+            }
+        }
+
+        /** @phpstan-ignore-next-line */
+        return parent::whereNotNull($columns, $boolean);
+    }
+
+    /**
+     * Add a "where column" clause to the query, handling subtype columns.
+     *
+     * @param \Closure|string|array<mixed> $first
+     * @param string|null $operator
+     * @param string|null $second
+     * @param string|null $boolean
+     * @return $this
+     */
+    public function whereColumn($first, $operator = null, $second = null, $boolean = 'and'): self
+    {
+        if (is_string($first)) {
+            $this->addSubtypeJoinIfNeeded($first);
+        }
+
+        if (is_string($second)) {
+            $this->addSubtypeJoinIfNeeded($second);
+        }
+
+        /** @phpstan-ignore-next-line */
+        return parent::whereColumn($first, $operator, $second, $boolean);
+    }
+
+    /**
      * Add a "where between" clause to the query, handling subtype columns.
      *
      * @param \Illuminate\Database\Query\Expression<float|int|string>|string $column

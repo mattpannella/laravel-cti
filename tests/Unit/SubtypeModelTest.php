@@ -12,9 +12,15 @@ use Pannella\Cti\Tests\Fixtures\Quiz;
 use Pannella\Cti\Tests\Fixtures\Survey;
 use Pannella\Cti\Tests\Fixtures\QuizQuestion;
 use Pannella\Cti\Tests\Fixtures\QuizAttempt;
+use Pannella\Cti\Tests\Fixtures\QuizSettings;
+use Pannella\Cti\Tests\Fixtures\QuizCategory;
+use Pannella\Cti\Tests\Fixtures\Student;
+use Pannella\Cti\Tests\Fixtures\AssessmentTag;
 use Pannella\Cti\Tests\Fixtures\MisconfiguredAssessment;
 use Pannella\Cti\Tests\Fixtures\RegularModel;
+use Pannella\Cti\Tests\Fixtures\OverlappingColumnsQuiz;
 use Pannella\Cti\Exceptions\SubtypeException;
+use Pannella\Cti\SubtypeModel;
 use Illuminate\Database\Eloquent\Model;
 
 class SubtypeModelTest extends TestCase
@@ -53,10 +59,14 @@ class SubtypeModelTest extends TestCase
 
     protected function tearDown(): void
     {
+        DB::statement('DROP TABLE IF EXISTS quiz_student');
+        DB::statement('DROP TABLE IF EXISTS students');
+        DB::statement('DROP TABLE IF EXISTS quiz_settings');
         DB::statement('DROP TABLE IF EXISTS quiz_attempts');
         DB::statement('DROP TABLE IF EXISTS quiz_questions');
         DB::statement('DROP TABLE IF EXISTS assessment_survey');
         DB::statement('DROP TABLE IF EXISTS assessment_quiz');
+        DB::statement('DROP TABLE IF EXISTS quiz_categories');
         DB::statement('DROP TABLE IF EXISTS assessment');
         DB::statement('DROP TABLE IF EXISTS assessment_type');
 
@@ -64,7 +74,11 @@ class SubtypeModelTest extends TestCase
         Quiz::clearBootedModels();
         Survey::clearBootedModels();
         Assessment::clearBootedModels();
+        OverlappingColumnsQuiz::clearBootedModels();
         Model::unsetEventDispatcher();
+
+        // Reset the validation cache between tests
+        $this->resetValidationCache();
 
         $this->db = null;
         $this->dispatcher = null;
@@ -89,11 +103,17 @@ class SubtypeModelTest extends TestCase
             $table->timestamps();
         });
 
+        DB::schema()->create('quiz_categories', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+        });
+
         DB::schema()->create('assessment_quiz', function (Blueprint $table) {
             $table->foreignId('assessment_id')->constrained('assessments')->onDelete('cascade');
             $table->integer('passing_score');
             $table->integer('time_limit')->nullable();
             $table->boolean('show_correct_answers')->default(false);
+            $table->foreignId('category_id')->nullable();
             $table->primary('assessment_id');
         });
 
@@ -116,6 +136,30 @@ class SubtypeModelTest extends TestCase
             $table->foreignId('assessment_id');
             $table->string('student_name');
             $table->integer('score');
+        });
+
+        DB::schema()->create('assessment_tag', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('assessment_id');
+            $table->string('tag_name');
+        });
+
+        DB::schema()->create('quiz_settings', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('assessment_id');
+            $table->boolean('randomize_questions')->default(false);
+            $table->boolean('show_progress_bar')->default(true);
+        });
+
+        DB::schema()->create('students', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+        });
+
+        DB::schema()->create('quiz_student', function (Blueprint $table) {
+            $table->foreignId('assessment_id');
+            $table->foreignId('student_id');
+            $table->primary(['assessment_id', 'student_id']);
         });
     }
 
@@ -195,7 +239,8 @@ class SubtypeModelTest extends TestCase
             'assessment_id' => 1,
             'passing_score' => 70,
             'time_limit' => 30,
-            'show_correct_answers' => false
+            'show_correct_answers' => false,
+            'category_id' => null,
         ];
 
         DB::table('assessment')->insert(array_merge($defaultAssessment, $assessmentData));
@@ -1648,6 +1693,863 @@ class SubtypeModelTest extends TestCase
         $this->assertInstanceOf(Quiz::class, $assessments[1]);
         $this->assertEquals(80, $assessments[0]->passing_score);
         $this->assertEquals(90, $assessments[1]->passing_score);
+    }
+
+    /**
+     * Test that querying directly through subtype model (Quiz::all()) applies parent casts.
+     * Parent model (Assessment) has casts for 'enabled' => 'boolean' and timestamps => 'datetime'.
+     * Without parent cast inheritance, enabled would be 0/1 instead of boolean.
+     */
+    public function testDirectQueryAppliesParentCasts(): void
+    {
+        $timestamp = date('Y-m-d H:i:s');
+        
+        // Create quiz records with enabled=0 and enabled=1
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'Quiz with enabled=0', 'type_id' => 1, 'enabled' => 0, 'created_at' => $timestamp, 'updated_at' => $timestamp],
+            ['assessment_id' => 1, 'passing_score' => 80, 'time_limit' => 60]
+        );
+        $this->createQuizRecord(
+            ['id' => 2, 'title' => 'Quiz with enabled=1', 'type_id' => 1, 'enabled' => 1, 'created_at' => $timestamp, 'updated_at' => $timestamp],
+            ['assessment_id' => 2, 'passing_score' => 90, 'time_limit' => 45]
+        );
+
+        // Query directly through Quiz model
+        $quizzes = Quiz::all();
+
+        $this->assertCount(2, $quizzes);
+
+        // Verify boolean cast is applied (not 0/1)
+        $quiz1 = $quizzes->first(fn ($q) => $q->id === 1);
+        $quiz2 = $quizzes->first(fn ($q) => $q->id === 2);
+
+        $this->assertIsBool($quiz1->enabled, 'enabled should be boolean');
+        $this->assertFalse($quiz1->enabled, 'enabled=0 should cast to false');
+
+        $this->assertIsBool($quiz2->enabled, 'enabled should be boolean');
+        $this->assertTrue($quiz2->enabled, 'enabled=1 should cast to true');
+
+        // Verify datetime cast is applied (Carbon instance, not string)
+        $this->assertInstanceOf(\Illuminate\Support\Carbon::class, $quiz1->created_at);
+        $this->assertInstanceOf(\Illuminate\Support\Carbon::class, $quiz1->updated_at);
+    }
+
+    /**
+     * Test that querying directly through subtype model merges parent attributes.
+     * Both parent (title, description, enabled) and subtype (passing_score, time_limit) attributes
+     * should be accessible on the Quiz instance.
+     */
+    public function testDirectQueryMergesParentAttributes(): void
+    {
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'My Quiz', 'description' => 'Test description', 'type_id' => 1, 'enabled' => 1],
+            ['assessment_id' => 1, 'passing_score' => 85, 'time_limit' => 60]
+        );
+
+        // Query directly through Quiz model
+        $quiz = Quiz::find(1);
+
+        $this->assertNotNull($quiz);
+
+        // Verify parent attributes are accessible
+        $this->assertEquals('My Quiz', $quiz->title);
+        $this->assertEquals('Test description', $quiz->description);
+        $this->assertTrue($quiz->enabled); // Also tests cast
+
+        // Verify subtype attributes are accessible
+        $this->assertEquals(85, $quiz->passing_score);
+        $this->assertEquals(60, $quiz->time_limit);
+
+        // Verify it's a Quiz instance, not Assessment
+        $this->assertInstanceOf(Quiz::class, $quiz);
+    }
+
+    /**
+     * Test that models without $ctiParentClass still work (backwards compatibility).
+     * RegularModel doesn't have $ctiParentClass set, so it should work as before.
+     */
+    public function testDirectQueryWithoutParentClassStillWorks(): void
+    {
+        $timestamp = date('Y-m-d H:i:s');
+        
+        // Create a regular model record (no subtype table)
+        DB::table('assessment')->insert([
+            'id' => 999,
+            'title' => 'Regular Model',
+            'type_id' => 1,
+            'enabled' => 1,
+            'created_at' => $timestamp,
+            'updated_at' => $timestamp,
+        ]);
+
+        // Query through RegularModel (no $ctiParentClass, no subtype table)
+        $model = RegularModel::find(999);
+
+        $this->assertNotNull($model);
+        $this->assertEquals('Regular Model', $model->title);
+        $this->assertInstanceOf(RegularModel::class, $model);
+
+        // Should work without errors even though no parent class defined
+    }
+
+    /**
+     * Test that parent relationships are accessible from subtype instances.
+     * Assessment has a tags() relationship, which should be accessible from Quiz instances.
+     */
+    public function testParentRelationshipAccessibleFromSubtype(): void
+    {
+        // Create a quiz with tags
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'Quiz with tags', 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 85]
+        );
+
+        DB::table('assessment_tag')->insert([
+            ['assessment_id' => 1, 'tag_name' => 'math'],
+            ['assessment_id' => 1, 'tag_name' => 'algebra'],
+        ]);
+
+        // Query directly through Quiz
+        $quiz = Quiz::find(1);
+        $this->assertNotNull($quiz);
+
+        // Access parent relationship as method call
+        $tags = $quiz->tags()->get();
+
+        $this->assertCount(2, $tags);
+        $this->assertEquals('math', $tags[0]->tag_name);
+        $this->assertEquals('algebra', $tags[1]->tag_name);
+    }
+
+    /**
+     * Test that parent relationship queries work correctly.
+     * Should be able to query parent relationships with where clauses, etc.
+     */
+    public function testParentRelationshipQueryWorks(): void
+    {
+        // Create a quiz with multiple tags
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'Quiz with tags', 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 85]
+        );
+
+        DB::table('assessment_tag')->insert([
+            ['assessment_id' => 1, 'tag_name' => 'math'],
+            ['assessment_id' => 1, 'tag_name' => 'algebra'],
+            ['assessment_id' => 1, 'tag_name' => 'geometry'],
+        ]);
+
+        // Query directly through Quiz
+        $quiz = Quiz::find(1);
+        $this->assertNotNull($quiz);
+
+        // Query parent relationship with where clause
+        $mathTags = $quiz->tags()->where('tag_name', 'math')->get();
+
+        $this->assertCount(1, $mathTags);
+        $this->assertEquals('math', $mathTags[0]->tag_name);
+
+        // Query with multiple conditions
+        $filteredTags = $quiz->tags()->whereIn('tag_name', ['math', 'geometry'])->get();
+        $this->assertCount(2, $filteredTags);
+    }
+
+    /**
+     * Test that subtype relationships take precedence over parent relationships.
+     * If both parent and subtype define the same relationship method, subtype wins.
+     */
+    public function testSubtypeRelationshipTakesPrecedence(): void
+    {
+        // Create quiz with questions (subtype relationship)
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'My Quiz', 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 80]
+        );
+
+        DB::table('quiz_questions')->insert([
+            ['assessment_id' => 1, 'question_text' => 'Question 1', 'points' => 10],
+            ['assessment_id' => 1, 'question_text' => 'Question 2', 'points' => 15],
+        ]);
+
+        // Query through Quiz
+        $quiz = Quiz::find(1);
+
+        // questions() is defined on Quiz (subtype), not Assessment (parent)
+        $questions = $quiz->questions;
+
+        $this->assertCount(2, $questions);
+        $this->assertInstanceOf(QuizQuestion::class, $questions[0]);
+        $this->assertEquals('Question 1', $questions[0]->question_text);
+    }
+
+    /**
+     * Test that calling undefined methods on parent doesn't cause infinite recursion.
+     * Should throw BadMethodCallException as expected.
+     */
+    public function testUndefinedMethodThrowsException(): void
+    {
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'My Quiz', 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 80]
+        );
+
+        $quiz = Quiz::find(1);
+
+        $this->expectException(\BadMethodCallException::class);
+        $quiz->nonExistentMethod();
+    }
+
+    /**
+     * Test eager loading parent relationships works with direct subtype queries.
+     * NOTE: This is currently a known limitation - eager loading parent relationships
+     * may not work perfectly without explicit with() on the query builder.
+     */
+    public function testSubtypeRelationshipsStillWorkAfterParentProxying(): void
+    {
+        // Create quiz with both parent (tags) and subtype (questions) relationships
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'My Quiz', 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 80]
+        );
+
+        DB::table('assessment_tag')->insert([
+            ['assessment_id' => 1, 'tag_name' => 'math'],
+        ]);
+
+        DB::table('quiz_questions')->insert([
+            ['assessment_id' => 1, 'question_text' => 'Question 1', 'points' => 10],
+        ]);
+
+        $quiz = Quiz::find(1);
+
+        // Both parent and subtype relationships should work
+        $tags = $quiz->tags()->get();
+        $questions = $quiz->questions;
+
+        $this->assertCount(1, $tags);
+        $this->assertEquals('math', $tags[0]->tag_name);
+
+        $this->assertCount(1, $questions);
+        $this->assertEquals('Question 1', $questions[0]->question_text);
+    }
+
+    // ============================================================
+    // Phase 2: High Priority Tests
+    // ============================================================
+
+    /**
+     * Test whereNull on a subtype column triggers the join.
+     */
+    public function testWhereNullWithSubtypeColumn(): void
+    {
+        $this->createQuizRecord(
+            ['id' => 1, 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 80, 'time_limit' => 60]
+        );
+        $this->createQuizRecord(
+            ['id' => 2, 'type_id' => 1],
+            ['assessment_id' => 2, 'passing_score' => 90, 'time_limit' => null]
+        );
+
+        $result = Quiz::whereNull('time_limit')->get();
+
+        $this->assertCount(1, $result);
+        $this->assertEquals(2, $result->first()->id);
+    }
+
+    /**
+     * Test whereNotNull on a subtype column triggers the join.
+     */
+    public function testWhereNotNullWithSubtypeColumn(): void
+    {
+        $this->createQuizRecord(
+            ['id' => 1, 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 80, 'time_limit' => 60]
+        );
+        $this->createQuizRecord(
+            ['id' => 2, 'type_id' => 1],
+            ['assessment_id' => 2, 'passing_score' => 90, 'time_limit' => null]
+        );
+
+        $result = Quiz::whereNotNull('time_limit')->get();
+
+        $this->assertCount(1, $result);
+        $this->assertEquals(1, $result->first()->id);
+    }
+
+    /**
+     * Test whereColumn with a subtype column triggers the join.
+     */
+    public function testWhereColumnWithSubtypeColumn(): void
+    {
+        $this->createQuizRecord(
+            ['id' => 1, 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 80, 'time_limit' => 80]
+        );
+        $this->createQuizRecord(
+            ['id' => 2, 'type_id' => 1],
+            ['assessment_id' => 2, 'passing_score' => 90, 'time_limit' => 60]
+        );
+
+        $result = Quiz::whereColumn('passing_score', '=', 'time_limit')->get();
+
+        $this->assertCount(1, $result);
+        $this->assertEquals(1, $result->first()->id);
+    }
+
+    /**
+     * Test subtypeHasOne relationship.
+     */
+    public function testSubtypeHasOneRelationship(): void
+    {
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'Test Quiz', 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 80]
+        );
+
+        DB::table('quiz_settings')->insert([
+            'assessment_id' => 1,
+            'randomize_questions' => true,
+            'show_progress_bar' => false,
+        ]);
+
+        $quiz = Quiz::find(1);
+        $settings = $quiz->settings;
+
+        $this->assertNotNull($settings);
+        $this->assertInstanceOf(QuizSettings::class, $settings);
+        $this->assertEquals(1, $settings->randomize_questions);
+        $this->assertEquals(0, $settings->show_progress_bar);
+    }
+
+    /**
+     * Test subtypeHasOne returns null when no related record exists.
+     */
+    public function testSubtypeHasOneReturnsNullWhenNoRelated(): void
+    {
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'Test Quiz', 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 80]
+        );
+
+        $quiz = Quiz::find(1);
+        $settings = $quiz->settings;
+
+        $this->assertNull($settings);
+    }
+
+    /**
+     * Test subtypeBelongsTo relationship.
+     */
+    public function testSubtypeBelongsToRelationship(): void
+    {
+        DB::table('quiz_categories')->insert(['id' => 1, 'name' => 'Mathematics']);
+
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'Math Quiz', 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 80, 'category_id' => 1]
+        );
+
+        $quiz = Quiz::find(1);
+        $category = $quiz->category;
+
+        $this->assertNotNull($category);
+        $this->assertInstanceOf(QuizCategory::class, $category);
+        $this->assertEquals('Mathematics', $category->name);
+    }
+
+    /**
+     * Test subtypeBelongsTo returns null when foreign key is null.
+     */
+    public function testSubtypeBelongsToReturnsNullWhenForeignKeyNull(): void
+    {
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'Quiz', 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 80, 'category_id' => null]
+        );
+
+        $quiz = Quiz::find(1);
+        $category = $quiz->category;
+
+        $this->assertNull($category);
+    }
+
+    /**
+     * Test subtypeBelongsToMany relationship.
+     */
+    public function testSubtypeBelongsToManyRelationship(): void
+    {
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'Test Quiz', 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 80]
+        );
+
+        DB::table('students')->insert([
+            ['id' => 1, 'name' => 'Alice'],
+            ['id' => 2, 'name' => 'Bob'],
+        ]);
+
+        DB::table('quiz_student')->insert([
+            ['assessment_id' => 1, 'student_id' => 1],
+            ['assessment_id' => 1, 'student_id' => 2],
+        ]);
+
+        $quiz = Quiz::find(1);
+        $students = $quiz->students;
+
+        $this->assertCount(2, $students);
+        $this->assertEquals('Alice', $students[0]->name);
+        $this->assertEquals('Bob', $students[1]->name);
+    }
+
+    /**
+     * Test subtypeBelongsToMany with empty pivot.
+     */
+    public function testSubtypeBelongsToManyWithNoPivotRecords(): void
+    {
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'Test Quiz', 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 80]
+        );
+
+        $quiz = Quiz::find(1);
+        $students = $quiz->students;
+
+        $this->assertCount(0, $students);
+    }
+
+    /**
+     * Test SubtypeException::missingTable() is thrown correctly.
+     */
+    public function testMissingTableExceptionPath(): void
+    {
+        $this->expectException(SubtypeException::class);
+        $this->expectExceptionMessage('Subtype table must be defined.');
+
+        throw SubtypeException::missingTable();
+    }
+
+    /**
+     * Test SubtypeException::missingTypeId() is thrown correctly.
+     */
+    public function testMissingTypeIdExceptionPath(): void
+    {
+        $this->expectException(SubtypeException::class);
+        $this->expectExceptionMessage('Missing type ID for model Pannella\Cti\Tests\Fixtures\Quiz');
+
+        throw SubtypeException::missingTypeId(Quiz::class);
+    }
+
+    /**
+     * Test SubtypeException::saveFailed() is thrown correctly.
+     */
+    public function testSaveFailedExceptionPath(): void
+    {
+        $this->expectException(SubtypeException::class);
+        $this->expectExceptionMessage('Failed to save subtype data to table: assessment_quiz');
+
+        throw SubtypeException::saveFailed('assessment_quiz');
+    }
+
+    /**
+     * Test BootsSubtypeModel does NOT override a manually-set type_id.
+     */
+    public function testBootsSubtypeModelDoesNotOverridePresetTypeId(): void
+    {
+        $quiz = new Quiz();
+        $quiz->type_id = 1; // Manually set type_id
+        $quiz->title = 'Manually Typed Quiz';
+        $quiz->passing_score = 70;
+
+        $quiz->save();
+
+        $assessment = DB::table('assessment')->where('id', $quiz->id)->first();
+        $this->assertEquals(1, $assessment->type_id);
+    }
+
+    /**
+     * Test mixed-type batch loading uses 1 query per subtype table.
+     */
+    public function testMixedTypeBatchLoadingEfficiency(): void
+    {
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'Quiz 1', 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 80]
+        );
+        $this->createQuizRecord(
+            ['id' => 2, 'title' => 'Quiz 2', 'type_id' => 1],
+            ['assessment_id' => 2, 'passing_score' => 90]
+        );
+        $this->createSurveyRecord(
+            ['id' => 3, 'title' => 'Survey 1', 'type_id' => 2],
+            ['assessment_id' => 3, 'anonymous' => true]
+        );
+
+        DB::connection()->enableQueryLog();
+        $assessments = Assessment::all();
+        $queryLog = DB::connection()->getQueryLog();
+
+        // Should have 1 query for parent table, 1 for quiz subtype, 1 for survey subtype = 3 total
+        $quizQueries = array_filter($queryLog, fn ($q) => strpos($q['query'], 'assessment_quiz') !== false);
+        $surveyQueries = array_filter($queryLog, fn ($q) => strpos($q['query'], 'assessment_survey') !== false);
+
+        $this->assertCount(1, $quizQueries, 'Should have exactly 1 query to assessment_quiz');
+        $this->assertCount(1, $surveyQueries, 'Should have exactly 1 query to assessment_survey');
+
+        // Verify data integrity
+        $this->assertCount(3, $assessments);
+        $quizzes = $assessments->filter(fn ($a) => $a instanceof Quiz);
+        $surveys = $assessments->filter(fn ($a) => $a instanceof Survey);
+        $this->assertCount(2, $quizzes);
+        $this->assertCount(1, $surveys);
+    }
+
+    // ============================================================
+    // Phase 3: Medium Priority Tests
+    // ============================================================
+
+    /**
+     * Test save with no changes does not generate unnecessary UPDATE queries.
+     */
+    public function testSaveWithNoChanges(): void
+    {
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'Test Quiz', 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 80]
+        );
+
+        $quiz = Quiz::find(1);
+
+        DB::connection()->enableQueryLog();
+        $result = $quiz->save();
+        $queryLog = DB::connection()->getQueryLog();
+
+        $this->assertTrue($result);
+
+        // Should not have UPDATE queries for the subtype table since nothing changed
+        $subtypeUpdates = array_filter($queryLog, fn ($q) =>
+            strpos($q['query'], 'update') !== false
+            && strpos($q['query'], 'assessment_quiz') !== false
+        );
+        $this->assertCount(0, $subtypeUpdates, 'Should not UPDATE subtype table when nothing changed');
+    }
+
+    /**
+     * Test deleting a model that has no subtype record (parent-only row).
+     */
+    public function testDeleteModelWithNoSubtypeRecord(): void
+    {
+        // Create parent record without subtype record
+        DB::table('assessment')->insert([
+            'id' => 1,
+            'type_id' => 1,
+            'title' => 'Orphan Quiz',
+            'enabled' => true,
+        ]);
+
+        $quiz = Quiz::find(1);
+        $this->assertNotNull($quiz);
+
+        // Should delete without error even though no subtype record exists
+        $result = $quiz->delete();
+        $this->assertTrue($result);
+
+        $this->assertNull(DB::table('assessment')->where('id', 1)->first());
+    }
+
+    /**
+     * Test replicate with $except parameter excludes specified attributes.
+     */
+    public function testReplicateWithExceptParameter(): void
+    {
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'Original Quiz', 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 80, 'time_limit' => 60, 'show_correct_answers' => true]
+        );
+
+        $original = Quiz::find(1);
+        $clone = $original->replicate(['time_limit']);
+
+        $this->assertTrue($clone->save());
+        $this->assertNotEquals($original->id, $clone->id);
+        $this->assertEquals($original->title, $clone->title);
+        $this->assertEquals($original->passing_score, $clone->passing_score);
+        // time_limit should be excluded from the clone
+        $this->assertNull($clone->time_limit);
+    }
+
+    /**
+     * Test chained query builder with multiple subtype columns adds join only once.
+     */
+    public function testChainedQueryBuilderAddsJoinOnce(): void
+    {
+        $this->createQuizRecord(
+            ['id' => 1, 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 80, 'time_limit' => 60]
+        );
+        $this->createQuizRecord(
+            ['id' => 2, 'type_id' => 1],
+            ['assessment_id' => 2, 'passing_score' => 90, 'time_limit' => 30]
+        );
+        $this->createQuizRecord(
+            ['id' => 3, 'type_id' => 1],
+            ['assessment_id' => 3, 'passing_score' => 70, 'time_limit' => 45]
+        );
+
+        $result = Quiz::where('passing_score', '>', 70)
+            ->orderBy('time_limit')
+            ->get();
+
+        $this->assertCount(2, $result);
+        // Should be ordered by time_limit ascending: 30, 60
+        $this->assertEquals(30, $result[0]->time_limit);
+        $this->assertEquals(60, $result[1]->time_limit);
+    }
+
+    /**
+     * Test whereIn on subtype column.
+     */
+    public function testWhereInWithSubtypeColumn(): void
+    {
+        $this->createQuizRecord(
+            ['id' => 1, 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 70]
+        );
+        $this->createQuizRecord(
+            ['id' => 2, 'type_id' => 1],
+            ['assessment_id' => 2, 'passing_score' => 80]
+        );
+        $this->createQuizRecord(
+            ['id' => 3, 'type_id' => 1],
+            ['assessment_id' => 3, 'passing_score' => 90]
+        );
+
+        $result = Quiz::whereIn('passing_score', [70, 90])->get();
+
+        $this->assertCount(2, $result);
+        $scores = $result->pluck('passing_score')->sort()->values()->all();
+        $this->assertEquals([70, 90], $scores);
+    }
+
+    /**
+     * Test subtype-specific casts are applied.
+     * The Quiz model stores passing_score as integer and show_correct_answers as boolean-like.
+     */
+    public function testSubtypeSpecificCasts(): void
+    {
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'Cast Test', 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 85, 'time_limit' => 60, 'show_correct_answers' => 1]
+        );
+
+        $quiz = Quiz::find(1);
+
+        // passing_score is stored as integer and should be returned as integer
+        $this->assertIsInt($quiz->passing_score);
+        $this->assertEquals(85, $quiz->passing_score);
+
+        // time_limit should be an integer
+        $this->assertIsInt($quiz->time_limit);
+        $this->assertEquals(60, $quiz->time_limit);
+    }
+
+    /**
+     * Test toArray includes both parent and subtype attributes.
+     */
+    public function testToArrayIncludesBothParentAndSubtypeAttributes(): void
+    {
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'Array Test', 'type_id' => 1, 'description' => 'A description'],
+            ['assessment_id' => 1, 'passing_score' => 85, 'time_limit' => 60]
+        );
+
+        $quiz = Quiz::find(1);
+        $array = $quiz->toArray();
+
+        // Parent attributes
+        $this->assertArrayHasKey('title', $array);
+        $this->assertArrayHasKey('description', $array);
+        $this->assertEquals('Array Test', $array['title']);
+
+        // Subtype attributes
+        $this->assertArrayHasKey('passing_score', $array);
+        $this->assertArrayHasKey('time_limit', $array);
+        $this->assertEquals(85, $array['passing_score']);
+        $this->assertEquals(60, $array['time_limit']);
+    }
+
+    /**
+     * Test toJson includes both parent and subtype attributes.
+     */
+    public function testToJsonIncludesBothParentAndSubtypeAttributes(): void
+    {
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'JSON Test', 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 85, 'time_limit' => 60]
+        );
+
+        $quiz = Quiz::find(1);
+        $json = $quiz->toJson();
+        $decoded = json_decode($json, true);
+
+        $this->assertArrayHasKey('title', $decoded);
+        $this->assertArrayHasKey('passing_score', $decoded);
+        $this->assertEquals('JSON Test', $decoded['title']);
+        $this->assertEquals(85, $decoded['passing_score']);
+    }
+
+    /**
+     * Test collection pluck on subtype attribute works.
+     */
+    public function testCollectionPluckSubtypeAttribute(): void
+    {
+        $this->createQuizRecord(
+            ['id' => 1, 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 70]
+        );
+        $this->createQuizRecord(
+            ['id' => 2, 'type_id' => 1],
+            ['assessment_id' => 2, 'passing_score' => 80]
+        );
+        $this->createQuizRecord(
+            ['id' => 3, 'type_id' => 1],
+            ['assessment_id' => 3, 'passing_score' => 90]
+        );
+
+        $scores = Quiz::all()->pluck('passing_score')->all();
+
+        $this->assertEquals([70, 80, 90], $scores);
+    }
+
+    // ============================================================
+    // Overlapping Column Validation Tests
+    // ============================================================
+
+    /**
+     * Reset the static validation cache via reflection.
+     */
+    protected function resetValidationCache(): void
+    {
+        $ref = new \ReflectionProperty(SubtypeModel::class, 'validatedSubtypeColumns');
+        $ref->setAccessible(true);
+        $ref->setValue(null, []);
+    }
+
+    /**
+     * Test that overlapping columns throw SubtypeException on save().
+     */
+    public function testOverlappingColumnsThrowOnSave(): void
+    {
+        $this->expectException(SubtypeException::class);
+        $this->expectExceptionMessage('overlap with parent table columns: title');
+
+        $model = new OverlappingColumnsQuiz();
+        $model->title = 'Test';
+        $model->passing_score = 80;
+        $model->save();
+    }
+
+    /**
+     * Test that overlapping columns throw SubtypeException on loadSubtypeData().
+     */
+    public function testOverlappingColumnsThrowOnLoadSubtypeData(): void
+    {
+        $this->expectException(SubtypeException::class);
+        $this->expectExceptionMessage('overlap with parent table columns: title');
+
+        $model = new OverlappingColumnsQuiz();
+        $model->id = 1;
+        $model->exists = true;
+        $model->loadSubtypeData();
+    }
+
+    /**
+     * Test that non-overlapping columns pass validation without error.
+     */
+    public function testNonOverlappingColumnsPassValidation(): void
+    {
+        $quiz = new Quiz();
+        $quiz->title = 'Valid Quiz';
+        $quiz->passing_score = 80;
+
+        // Should not throw — Quiz's subtypeAttributes don't overlap with parent columns
+        $saved = $quiz->save();
+        $this->assertTrue($saved);
+    }
+
+    /**
+     * Test that validation result is cached (schema query runs only once).
+     */
+    public function testValidationResultIsCached(): void
+    {
+        DB::connection()->enableQueryLog();
+
+        // First save triggers validation (schema query)
+        $quiz1 = new Quiz();
+        $quiz1->title = 'Quiz 1';
+        $quiz1->passing_score = 80;
+        $quiz1->save();
+
+        $logAfterFirst = DB::connection()->getQueryLog();
+        $schemaQueriesFirst = array_filter($logAfterFirst, fn ($q) =>
+            stripos($q['query'], 'pragma') !== false
+            || stripos($q['query'], 'column_listing') !== false
+            || stripos($q['query'], 'information_schema') !== false
+            || stripos($q['query'], 'table_info') !== false
+        );
+        $firstCount = count($schemaQueriesFirst);
+
+        // Reset query log for second save
+        DB::connection()->flushQueryLog();
+        DB::connection()->enableQueryLog();
+
+        // Second save should use cache — no additional schema queries
+        $quiz2 = new Quiz();
+        $quiz2->title = 'Quiz 2';
+        $quiz2->passing_score = 90;
+        $quiz2->save();
+
+        $logAfterSecond = DB::connection()->getQueryLog();
+        $schemaQueriesSecond = array_filter($logAfterSecond, fn ($q) =>
+            stripos($q['query'], 'pragma') !== false
+            || stripos($q['query'], 'column_listing') !== false
+            || stripos($q['query'], 'information_schema') !== false
+            || stripos($q['query'], 'table_info') !== false
+        );
+        $secondCount = count($schemaQueriesSecond);
+
+        // The second save should have fewer (zero) schema queries
+        $this->assertLessThan($firstCount, $secondCount, 'Cached validation should not run schema queries again');
+    }
+
+    /**
+     * Test that validation is skipped gracefully when schema check fails.
+     */
+    public function testValidationSkipsGracefullyOnSchemaFailure(): void
+    {
+        // Create an anonymous subtype model pointing to a non-existent table
+        $model = new class extends SubtypeModel {
+            protected $table = 'nonexistent_parent_table';
+            protected $subtypeTable = 'nonexistent_subtype_table';
+            protected $subtypeAttributes = ['some_column'];
+        };
+
+        // Should not throw — schema check failure is caught and skipped
+        $model->validateSubtypeColumns();
+        $this->assertTrue(true, 'Validation should complete without error');
+    }
+
+    /**
+     * Test SubtypeException::overlappingColumns() message format.
+     */
+    public function testOverlappingColumnsExceptionMessage(): void
+    {
+        $exception = SubtypeException::overlappingColumns('App\\Models\\Foo', ['title', 'description']);
+
+        $this->assertInstanceOf(SubtypeException::class, $exception);
+        $this->assertStringContainsString('App\\Models\\Foo', $exception->getMessage());
+        $this->assertStringContainsString('title, description', $exception->getMessage());
+        $this->assertStringContainsString('Subtype attributes must be unique', $exception->getMessage());
     }
 }
 

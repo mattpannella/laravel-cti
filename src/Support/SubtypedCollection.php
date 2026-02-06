@@ -80,6 +80,7 @@ class SubtypedCollection extends Collection
         foreach ($grouped as $class => $models) {
             /** @var SubtypeModel $first */
             $first = $models[0];
+            $first->validateSubtypeColumns();
             $subtypeTable = $first->getSubtypeTable();
             $subtypeKeyName = $first->getSubtypeKeyName();
             $primaryKeyName = $first->getKeyName();
@@ -88,7 +89,7 @@ class SubtypedCollection extends Collection
             $keys = array_filter(array_map(
                 fn (SubtypeModel $m) => $m->getAttribute($primaryKeyName),
                 $models
-            ));
+            ), fn ($k) => $k !== null);
 
             if (empty($keys)) {
                 continue;
