@@ -42,10 +42,19 @@ trait HasSubtypes
 
         if ($subclass && class_exists($subclass)) {
             // Create subtype instance with parent's casts applied
-            $sub = new $subclass();
+            // We use newInstance with $exists=true to skip individual loadSubtypeData()
+            // because SubtypedCollection will batch-load all subtype data efficiently
+            $sub = (new $subclass())->newInstance([], true);
             $sub->mergeCasts($this->getCasts());
-            $sub = $sub->newFromBuilder($attributes, $connection);
-
+            $sub->setRawAttributes((array) $attributes, true);
+            
+            // Manually apply casts to the attributes that were set
+            foreach ($attributes as $key => $value) {
+                if ($sub->hasCast($key)) {
+                    $sub->setAttribute($key, $value);
+                }
+            }
+            
             return $sub;
         }
 
