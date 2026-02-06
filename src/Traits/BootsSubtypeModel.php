@@ -38,10 +38,10 @@ trait BootsSubtypeModel
                         $lookupTable = $ctiParentClass->getSubtypeLookupTable();
                         $lookupKeyCol = $ctiParentClass->getSubtypeLookupKey();
                         $lookupLabelCol = $ctiParentClass->getSubtypeLookupLabel();
-                        
+
                         $typeId = $model->getConnection()->table($lookupTable)
-                                        ->where($lookupLabelCol, $label)
-                                        ->value($lookupKeyCol);
+                            ->where($lookupLabelCol, $label)
+                            ->value($lookupKeyCol);
 
                         if ($typeId !== null) {
                             $model->setAttribute($discriminatorColumn, $typeId);

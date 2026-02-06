@@ -9,7 +9,7 @@ use Pannella\Cti\Support\SubtypedCollection;
 
 /**
  * Trait for implementing Class Table Inheritance in base/parent models.
- * 
+ *
  * This trait provides functionality for resolving models to their specific
  * subtypes based on a type identifier. It requires the using class to define
  * several static properties to configure the subtype resolution.
@@ -25,7 +25,7 @@ trait HasSubtypes
 {
     /**
      * Override newFromBuilder to morph base model to subtype based on type_id.
-     * 
+     *
      * When a model is loaded from the database, this method checks if it should
      * be converted to a more specific subtype based on its type identifier.
      *
@@ -46,10 +46,6 @@ trait HasSubtypes
             $sub = (new $subclass)->newInstance([], true);
             $sub->setRawAttributes((array) $attributes, true);
             $sub->exists = true;
-
-            if (method_exists($sub, 'loadSubtypeData')) {
-                $sub->loadSubtypeData();
-            }
 
             return $sub;
         }
@@ -87,7 +83,7 @@ trait HasSubtypes
                 ->first();
 
             $label = $type->{static::$subtypeLookupLabel} ?? null;
-            
+
             if (!$label) {
                 throw SubtypeException::invalidSubtype((string) $typeId);
             }
@@ -160,12 +156,12 @@ trait HasSubtypes
      */
     public function getSubtypeMap(): array
     {
-        return static::$subtypeMap ?? []; 
+        return static::$subtypeMap ?? [];
     }
 
     /**
      * Create a new collection instance with subtype support.
-     * 
+     *
      * @param array $models Array of models to include in collection
      * @return \Pannella\Cti\Support\SubtypedCollection
      */

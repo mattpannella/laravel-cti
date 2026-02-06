@@ -32,14 +32,14 @@ class SubtypeModelTest extends TestCase
         //set up fresh event dispatcher
         $this->db->setEventDispatcher($this->dispatcher);
         Model::setEventDispatcher($this->dispatcher);
-        
+
         $this->db->setAsGlobal();
         $this->db->bootEloquent();
 
         //force re-boot of models to ensure events are registered fresh
         Quiz::clearBootedModels();
         Assessment::clearBootedModels();
-        
+
         //create test tables
         $this->createTables();
         $this->seedTestData();
@@ -50,15 +50,15 @@ class SubtypeModelTest extends TestCase
         DB::statement('DROP TABLE IF EXISTS assessment_quiz');
         DB::statement('DROP TABLE IF EXISTS assessment');
         DB::statement('DROP TABLE IF EXISTS assessment_type');
-        
+
         // clear all event listeners
         Quiz::clearBootedModels();
         Assessment::clearBootedModels();
         Model::unsetEventDispatcher();
-        
+
         $this->db = null;
         $this->dispatcher = null;
-        
+
         parent::tearDown();
     }
 
@@ -101,20 +101,20 @@ class SubtypeModelTest extends TestCase
         $quiz = new Quiz();
         $quiz->passing_score = 80;
         $quiz->time_limit = 60;
-        
+
         $saved = $quiz->save();
-        
+
         $this->assertTrue($saved);
-        
+
         $assessment = DB::table('assessment')->first();
         $this->assertNotNull($assessment);
         $this->assertEquals(1, $assessment->type_id);
-    
+
         $quizData = DB::table('assessment_quiz')->first();
         $this->assertNotNull($quizData);
         $this->assertEquals(80, $quizData->passing_score);
         $this->assertEquals(60, $quizData->time_limit);
-        
+
         $this->assertEquals($assessment->id, $quizData->assessment_id);
     }
 
@@ -131,19 +131,19 @@ class SubtypeModelTest extends TestCase
         $quiz->show_correct_answers = true;
 
         $this->assertTrue($quiz->save());
-        
+
         $assessment = DB::table('assessment')->first();
         $this->assertNotNull($assessment);
         $this->assertEquals('Test Quiz', $assessment->title);
         $this->assertEquals('A test quiz', $assessment->description);
         $this->assertEquals(1, $assessment->type_id);
-        
+
         $quizData = DB::table('assessment_quiz')->first();
         $this->assertNotNull($quizData);
         $this->assertEquals(80, $quizData->passing_score);
         $this->assertEquals(60, $quizData->time_limit);
         $this->assertEquals(1, $quizData->show_correct_answers);
-        
+
         $this->assertEquals($assessment->id, $quizData->assessment_id);
     }
 
@@ -183,7 +183,7 @@ class SubtypeModelTest extends TestCase
         ]);
 
         $quiz = Quiz::find(1);
-        
+
         $this->assertInstanceOf(Quiz::class, $quiz);
         $this->assertEquals('Existing Quiz', $quiz->title);
         $this->assertEquals(70, $quiz->passing_score);
@@ -246,7 +246,7 @@ class SubtypeModelTest extends TestCase
                 'passing_score' => 70
             ]
         );
-        
+
         $this->createQuizRecord(
             [
                 'id' => 2,
@@ -258,7 +258,7 @@ class SubtypeModelTest extends TestCase
                 'passing_score' => 80
             ]
         );
-        
+
         $this->createQuizRecord(
             [
                 'id' => 3,
@@ -273,7 +273,7 @@ class SubtypeModelTest extends TestCase
 
         // Load all quizzes efficiently
         $quizzes = Quiz::all();
-        
+
         $this->assertCount(3, $quizzes);
         $this->assertEquals('Quiz 1', $quizzes[0]->title);
         $this->assertEquals(70, $quizzes[0]->passing_score);
@@ -286,7 +286,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test replicating a quiz (clone with new ID)
      */
-    public function testReplicateQuiz(): void 
+    public function testReplicateQuiz(): void
     {
         $this->createQuizRecord([
             'title' => 'Original Quiz',
@@ -298,9 +298,9 @@ class SubtypeModelTest extends TestCase
 
         $original = Quiz::find(1);
         $clone = $original->replicate();
-        
+
         $this->assertTrue($clone->save());
-        
+
         // Verify clone has same attributes but different ID
         $this->assertNotEquals($original->id, $clone->id);
         $this->assertEquals($original->title, $clone->title);
@@ -319,13 +319,13 @@ class SubtypeModelTest extends TestCase
         ]);
 
         $quiz = Quiz::find(1);
-        
+
         // Update database directly
         DB::table('assessment')->where('id', 1)->update(['title' => 'Updated Title']);
         DB::table('assessment_quiz')->where('assessment_id', 1)->update(['passing_score' => 90]);
-        
+
         $quiz->refresh();
-        
+
         $this->assertEquals('Updated Title', $quiz->title);
         $this->assertEquals(90, $quiz->passing_score);
     }
@@ -345,7 +345,7 @@ class SubtypeModelTest extends TestCase
                 'passing_score' => 70
             ]
         );
-        
+
         $this->createQuizRecord(
             [
                 'id' => 2,
@@ -356,7 +356,7 @@ class SubtypeModelTest extends TestCase
                 'passing_score' => 80
             ]
         );
-        
+
         $this->createQuizRecord(
             [
                 'id' => 3,
@@ -369,7 +369,7 @@ class SubtypeModelTest extends TestCase
         );
 
         $highScoreQuizzes = Quiz::where('passing_score', '>', 75)->get();
-        
+
         $this->assertCount(2, $highScoreQuizzes);
         $this->assertEquals([80, 90], $highScoreQuizzes->pluck('passing_score')->all());
     }
@@ -384,9 +384,9 @@ class SubtypeModelTest extends TestCase
         $quiz->description = null;
         $quiz->time_limit = null;
         $quiz->passing_score = 70;
-        
+
         $this->assertTrue($quiz->save());
-        
+
         $loaded = Quiz::find($quiz->id);
         $this->assertNull($loaded->description);
         $this->assertNull($loaded->time_limit);
@@ -398,11 +398,11 @@ class SubtypeModelTest extends TestCase
     public function testSubtypeEvents(): void
     {
         $events = [];
-        
+
         Quiz::saved(function ($quiz) use (&$events) {
             $events[] = 'saved';
         });
-        
+
         Quiz::subtypeSaved(function ($quiz) use (&$events) {
             $events[] = 'subtypeSaved';
         });
@@ -460,7 +460,7 @@ class SubtypeModelTest extends TestCase
                 'passing_score' => 70
             ]
         );
-        
+
         $this->createQuizRecord(
             [
                 'id' => 2,
@@ -472,10 +472,10 @@ class SubtypeModelTest extends TestCase
                 'passing_score' => 80
             ]
         );
-        
+
         // Load multiple records at once
         $quizzes = Quiz::where('type_id', 1)->get();
-        
+
         $this->assertCount(2, $quizzes);
         foreach ($quizzes as $quiz) {
             $this->assertInstanceOf(Quiz::class, $quiz);
@@ -501,9 +501,9 @@ class SubtypeModelTest extends TestCase
         ]);
 
         $assessment = Assessment::find(1);
-        
+
         $result = $assessment->loadSubtypes();
-        
+
         $this->assertInstanceOf(Collection::class, $result);
         $this->assertEquals('Invalid Quiz', $assessment->title);
         //verify no subtype attributes were added
@@ -516,25 +516,25 @@ class SubtypeModelTest extends TestCase
     public function testDirtyAttributesTracking(): void
     {
         $quiz = new Quiz();
-        
+
         // Set initial attributes
         $quiz->title = 'Test Quiz';
         $quiz->passing_score = 70;
         $this->assertTrue($quiz->isDirty());
-        
+
         // Save to clear dirty state
         $quiz->save();
         $this->assertFalse($quiz->isDirty());
-        
+
         // Modify only parent attribute
         $quiz->title = 'Updated Quiz';
         $this->assertTrue($quiz->isDirty('title'));
         $this->assertFalse($quiz->isDirty('passing_score'));
-        
+
         // Modify only subtype attribute
         $quiz->title = 'Updated Quiz';  // Reset to remove dirty state
         $quiz->save();
-        
+
         $quiz->passing_score = 80;
         $this->assertFalse($quiz->isDirty('title'));
         $this->assertTrue($quiz->isDirty('passing_score'));
@@ -549,10 +549,10 @@ class SubtypeModelTest extends TestCase
         $quiz->title = 'Test Quiz';
         $quiz->passing_score = 70;
         $quiz->save();
-        
+
         $this->assertNotNull($quiz->id);
         $this->assertEquals($quiz->id, $quiz->getKey());
-        
+
         // Check that subtype table uses the same ID
         $subtypeRecord = DB::table('assessment_quiz')
             ->where('assessment_id', $quiz->id)
@@ -569,16 +569,16 @@ class SubtypeModelTest extends TestCase
         $quiz->title = 'Test Quiz';
         $quiz->passing_score = 70;
         $quiz->save();
-        
+
         $this->assertNotNull($quiz->created_at);
         $this->assertNotNull($quiz->updated_at);
-        
+
         $originalUpdatedAt = $quiz->updated_at;
         sleep(1); // Ensure timestamp will be different
-        
+
         $quiz->title = 'Updated Quiz';
         $quiz->save();
-        
+
         $this->assertNotEquals($originalUpdatedAt, $quiz->updated_at);
     }
 
@@ -592,10 +592,10 @@ class SubtypeModelTest extends TestCase
             'passing_score' => 70,
             'non_fillable_field' => 'should not be set'
         ];
-        
+
         $quiz = new Quiz();
         $quiz->fill($data);
-        
+
         $this->assertEquals('Test Quiz', $quiz->title);
         $this->assertEquals(70, $quiz->passing_score);
         $this->assertNull($quiz->non_fillable_field);
