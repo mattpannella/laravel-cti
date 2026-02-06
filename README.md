@@ -145,15 +145,24 @@ The discriminator column (`type_id`) is **auto-assigned on create** — you don'
 
 Subtype data is loaded automatically whenever models are fetched via `get()`, `paginate()`, `find()`, `all()`, etc.
 
+**Important:** Subtype models automatically filter queries by their discriminator value. For example, `Quiz::all()` only returns records where `type_id` matches the quiz type — it will not return surveys. The parent model (`Assessment::all()`) returns all records and morphs them into the correct subtype instances.
+
 ```php
-// Fetch with automatic subtype resolution and batch-loaded subtype data
-$assessments = Assessment::all();
+// Querying subtype models only returns records of that type
+$quizzes = Quiz::all();     // Only quizzes (type_id = 1)
+$surveys = Survey::all();   // Only surveys (type_id = 2)
+
+// Parent model returns ALL records, morphed into correct subtype instances
+$assessments = Assessment::all();  // Returns Quiz and Survey instances
 
 // Each model is an instance of the correct subtype class
-$assessments->first() instanceof Quiz; // true
+$assessments->first() instanceof Quiz; // true or false depending on type_id
+
+// You can remove the discriminator filter if needed
+$allRecords = Quiz::withoutGlobalScope(\Pannella\Cti\Support\SubtypeDiscriminatorScope::class)->get();
 
 // Pagination works seamlessly — subtype data is batch-loaded for the page
-$assessments = Assessment::paginate(15);
+$quizzes = Quiz::paginate(15);  // Only quizzes
 
 // Create new subtype instance
 $quiz = new Quiz();

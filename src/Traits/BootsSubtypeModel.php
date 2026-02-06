@@ -4,6 +4,7 @@ namespace Pannella\Cti\Traits;
 
 use Pannella\Cti\Exceptions\SubtypeException;
 use Pannella\Cti\SubtypeModel;
+use Pannella\Cti\Support\SubtypeDiscriminatorScope;
 
 trait BootsSubtypeModel
 {
@@ -14,6 +15,9 @@ trait BootsSubtypeModel
      */
     protected static function bootBootsSubtypeModel()
     {
+        // Add global scope to filter by discriminator
+        static::addGlobalScope(new SubtypeDiscriminatorScope());
+
         static::creating(function (SubtypeModel $model) {
             $modelClass = get_class($model); // E.g., YourApp\Models\Quiz
 
