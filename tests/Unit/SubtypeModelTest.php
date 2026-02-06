@@ -1572,4 +1572,47 @@ class SubtypeModelTest extends TestCase
         $this->assertEquals(Quiz::class, $map['quiz']);
         $this->assertEquals(Survey::class, $map['survey']);
     }
+
+    /**
+     * Test parent model casts are applied to morphed subtype instances.
+     */
+    public function testParentCastsAppliedToMorphedInstances(): void
+    {
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'Test Quiz', 'type_id' => 1, 'enabled' => 1],
+            ['assessment_id' => 1, 'passing_score' => 80]
+        );
+
+        // Load through parent model - should morph to Quiz
+        $quiz = Assessment::find(1);
+
+        $this->assertInstanceOf(Quiz::class, $quiz);
+        
+        // The 'enabled' field should be cast to boolean (parent cast)
+        $this->assertIsBool($quiz->enabled);
+        $this->assertTrue($quiz->enabled);
+        
+        // Verify it's actually boolean, not int
+        $this->assertSame(true, $quiz->enabled);
+        $this->assertNotSame(1, $quiz->enabled);
+    }
+
+    /**
+     * Test parent model casts work with false values.
+     */
+    public function testParentCastsWithFalseValues(): void
+    {
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'Test Quiz', 'type_id' => 1, 'enabled' => 0],
+            ['assessment_id' => 1, 'passing_score' => 80]
+        );
+
+        $quiz = Assessment::find(1);
+
+        $this->assertInstanceOf(Quiz::class, $quiz);
+        $this->assertIsBool($quiz->enabled);
+        $this->assertFalse($quiz->enabled);
+        $this->assertSame(false, $quiz->enabled);
+        $this->assertNotSame(0, $quiz->enabled);
+    }
 }
