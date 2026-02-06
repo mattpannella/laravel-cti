@@ -31,4 +31,20 @@ class Quiz extends SubtypeModel
         'time_limit',
         'show_correct_answers'
     ];
+
+    /**
+     * Quiz has many questions (using subtype relationship).
+     */
+    public function questions()
+    {
+        return $this->subtypeHasMany(QuizQuestion::class);
+    }
+
+    /**
+     * Quiz has many attempts (using subtype relationship).
+     */
+    public function attempts()
+    {
+        return $this->subtypeHasMany(QuizAttempt::class);
+    }
 }

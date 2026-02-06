@@ -32,7 +32,7 @@ trait HasSubtypes
      * @param string|null $connection The database connection name
      * @return static|\Illuminate\Database\Eloquent\Model
      */
-    public function newFromBuilder($attributes = [], $connection = null): static
+    public function newFromBuilder($attributes = [], $connection = null): Model
     {
         $instance = parent::newFromBuilder($attributes, $connection);
 
@@ -40,7 +40,7 @@ trait HasSubtypes
         $label = $typeId ? static::resolveSubtypeLabel($typeId) : null;
         $subclass = $label ? static::$subtypeMap[$label] ?? null : null;
 
-        if ($subclass && is_subclass_of($subclass, static::class)) {
+        if ($subclass && class_exists($subclass)) {
             //instantiate subtype and fill raw attributes
             $sub = (new $subclass)->newInstance([], true);
             $sub->setRawAttributes((array) $attributes, true);
