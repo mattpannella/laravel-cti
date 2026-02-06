@@ -41,10 +41,10 @@ trait HasSubtypes
         $subclass = $label ? static::$subtypeMap[$label] ?? null : null;
 
         if ($subclass && class_exists($subclass)) {
-            //instantiate subtype and fill raw attributes
-            $sub = (new $subclass)->newInstance([], true);
-            $sub->setRawAttributes((array) $attributes, true);
-            $sub->exists = true;
+            // Create subtype instance with parent's casts applied
+            $sub = new $subclass();
+            $sub->mergeCasts($this->getCasts());
+            $sub = $sub->newFromBuilder($attributes, $connection);
 
             return $sub;
         }

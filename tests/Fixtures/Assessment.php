@@ -24,6 +24,12 @@ class Assessment extends Model
         'enabled'
     ];
 
+    protected $casts = [
+        'enabled' => 'boolean',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+    ];
+
     protected static $subtypeKey = 'type_id';
     protected static $subtypeLookupTable = 'assessment_type';
     protected static $subtypeLookupKey = 'id';
