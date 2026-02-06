@@ -54,7 +54,22 @@ class SubtypedCollection extends Collection
                 && $model->getSubtypeTable()
                 && $model->getKey()
             ) {
-                $grouped[get_class($model)][] = $model;
+                // Check if subtype data is already loaded
+                // If any subtype attribute is set, assume data is already loaded
+                $subtypeAttrs = $model->getSubtypeAttributes();
+                $alreadyLoaded = false;
+                if (!empty($subtypeAttrs)) {
+                    foreach ($subtypeAttrs as $attr) {
+                        if ($model->getAttribute($attr) !== null) {
+                            $alreadyLoaded = true;
+                            break;
+                        }
+                    }
+                }
+                
+                if (!$alreadyLoaded) {
+                    $grouped[get_class($model)][] = $model;
+                }
             }
         }
 

@@ -1615,4 +1615,39 @@ class SubtypeModelTest extends TestCase
         $this->assertSame(false, $quiz->enabled);
         $this->assertNotSame(0, $quiz->enabled);
     }
+
+    /**
+     * Test that Assessment::all() does not generate duplicate queries.
+     */
+    public function testNoDuplicateQueriesWhenMorphing(): void
+    {
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'Quiz 1', 'type_id' => 1, 'enabled' => 1],
+            ['assessment_id' => 1, 'passing_score' => 80]
+        );
+        $this->createQuizRecord(
+            ['id' => 2, 'title' => 'Quiz 2', 'type_id' => 1, 'enabled' => 1],
+            ['assessment_id' => 2, 'passing_score' => 90]
+        );
+
+        DB::connection()->enableQueryLog();
+        $assessments = Assessment::all();
+        $queryLog = DB::connection()->getQueryLog();
+
+        // Count queries to the subtype table
+        $subtypeQueries = array_filter($queryLog, function ($query) {
+            return strpos($query['query'], 'assessment_quiz') !== false;
+        });
+
+        // Should only have ONE query to load subtype data (batch load)
+        $this->assertCount(1, $subtypeQueries, 'Should only have 1 query to assessment_quiz table (no duplicates)');
+
+        // Verify the results are correct
+        $this->assertCount(2, $assessments);
+        $this->assertInstanceOf(Quiz::class, $assessments[0]);
+        $this->assertInstanceOf(Quiz::class, $assessments[1]);
+        $this->assertEquals(80, $assessments[0]->passing_score);
+        $this->assertEquals(90, $assessments[1]->passing_score);
+    }
 }
+
