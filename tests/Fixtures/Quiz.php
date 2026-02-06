@@ -19,6 +19,12 @@ class Quiz extends SubtypeModel
         'category_id',
     ];
 
+    protected $casts = [
+        'passing_score' => 'integer',
+        'time_limit' => 'integer',
+        'show_correct_answers' => 'boolean',
+    ];
+
     protected $attributes = [
         'show_correct_answers' => false
     ];
