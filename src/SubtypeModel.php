@@ -269,23 +269,6 @@ abstract class SubtypeModel extends Model
     }
 
     /**
-     * Force fill attributes, ensuring subtype attributes are properly set.
-     *
-     * @param array $attributes Attributes to fill
-     * @return $this
-     */
-    public function forceFill(array $attributes): self
-    {
-        foreach ($attributes as $key => $value) {
-            if (in_array($key, $this->subtypeAttributes)) {
-                $this->setAttribute($key, $value);
-            }
-        }
-
-        return parent::forceFill($attributes);
-    }
-
-    /**
      * Create a new Eloquent query builder for the model.
      *
      * @param \Illuminate\Database\Query\Builder $query
@@ -362,19 +345,6 @@ abstract class SubtypeModel extends Model
         }
 
         return $instance;
-    }
-
-    /**
-     * Create a new model instance that is existing.
-     * Overridden to ensure subtype data is loaded.
-     *
-     * @param array $attributes
-     * @param string|null $connection
-     * @return static
-     */
-    public function newFromBuilder($attributes = [], $connection = null)
-    {
-        return parent::newFromBuilder($attributes, $connection);
     }
 
     /**

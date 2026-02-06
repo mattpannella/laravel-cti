@@ -9,8 +9,10 @@ use Illuminate\Events\Dispatcher;
 use Illuminate\Container\Container;
 use Pannella\Cti\Tests\Fixtures\Assessment;
 use Pannella\Cti\Tests\Fixtures\Quiz;
+use Pannella\Cti\Tests\Fixtures\Survey;
+use Pannella\Cti\Tests\Fixtures\MisconfiguredAssessment;
+use Pannella\Cti\Exceptions\SubtypeException;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Collection;
 
 class SubtypeModelTest extends TestCase
 {
@@ -38,6 +40,7 @@ class SubtypeModelTest extends TestCase
 
         //force re-boot of models to ensure events are registered fresh
         Quiz::clearBootedModels();
+        Survey::clearBootedModels();
         Assessment::clearBootedModels();
 
         //create test tables
@@ -47,12 +50,14 @@ class SubtypeModelTest extends TestCase
 
     protected function tearDown(): void
     {
+        DB::statement('DROP TABLE IF EXISTS assessment_survey');
         DB::statement('DROP TABLE IF EXISTS assessment_quiz');
         DB::statement('DROP TABLE IF EXISTS assessment');
         DB::statement('DROP TABLE IF EXISTS assessment_type');
 
         // clear all event listeners
         Quiz::clearBootedModels();
+        Survey::clearBootedModels();
         Assessment::clearBootedModels();
         Model::unsetEventDispatcher();
 
@@ -86,13 +91,20 @@ class SubtypeModelTest extends TestCase
             $table->boolean('show_correct_answers')->default(false);
             $table->primary('assessment_id');
         });
+
+        DB::schema()->create('assessment_survey', function (Blueprint $table) {
+            $table->foreignId('assessment_id')->constrained('assessments')->onDelete('cascade');
+            $table->boolean('anonymous')->default(false);
+            $table->boolean('allow_multiple_responses')->default(false);
+            $table->primary('assessment_id');
+        });
     }
 
     protected function seedTestData(): void
     {
         DB::table('assessment_type')->insert([
-            'id' => 1,
-            'label' => 'quiz',
+            ['id' => 1, 'label' => 'quiz'],
+            ['id' => 2, 'label' => 'survey'],
         ]);
     }
 
@@ -169,6 +181,29 @@ class SubtypeModelTest extends TestCase
 
         DB::table('assessment')->insert(array_merge($defaultAssessment, $assessmentData));
         DB::table('assessment_quiz')->insert(array_merge($defaultQuiz, $quizData));
+    }
+
+    /**
+     * Helper to create a survey record directly in the database
+     */
+    protected function createSurveyRecord(array $assessmentData = [], array $surveyData = []): void
+    {
+        $defaultAssessment = [
+            'id' => 1,
+            'type_id' => 2,
+            'title' => 'Test Survey',
+            'description' => 'Test Description',
+            'enabled' => true
+        ];
+
+        $defaultSurvey = [
+            'assessment_id' => 1,
+            'anonymous' => false,
+            'allow_multiple_responses' => false
+        ];
+
+        DB::table('assessment')->insert(array_merge($defaultAssessment, $assessmentData));
+        DB::table('assessment_survey')->insert(array_merge($defaultSurvey, $surveyData));
     }
 
     public function testLoadExistingQuiz(): void
@@ -484,11 +519,11 @@ class SubtypeModelTest extends TestCase
     }
 
     /**
-     * Test invalid type_id handling
+     * Test invalid type_id returns base Assessment (not morphed to a subtype)
      */
     public function testInvalidTypeId(): void
     {
-        // Insert a new type_id that doesn't exist in our lookup map
+        // Insert a type_id whose label isn't in the subtypeMap
         DB::table('assessment_type')->insert([
             'id' => 999,
             'label' => 'invalid_type'
@@ -497,17 +532,16 @@ class SubtypeModelTest extends TestCase
         DB::table('assessment')->insert([
             'id' => 1,
             'type_id' => 999,
-            'title' => 'Invalid Quiz'
+            'title' => 'Invalid Assessment'
         ]);
 
+        // Loading through the parent should return a base Assessment, not a subtype
         $assessment = Assessment::find(1);
 
-        $result = $assessment->loadSubtypes();
-
-        $this->assertInstanceOf(Collection::class, $result);
-        $this->assertEquals('Invalid Quiz', $assessment->title);
-        //verify no subtype attributes were added
-        $this->assertFalse(isset($assessment->passing_score));
+        $this->assertInstanceOf(Assessment::class, $assessment);
+        $this->assertNotInstanceOf(Quiz::class, $assessment);
+        $this->assertNotInstanceOf(Survey::class, $assessment);
+        $this->assertEquals('Invalid Assessment', $assessment->title);
     }
 
     /**
@@ -599,5 +633,147 @@ class SubtypeModelTest extends TestCase
         $this->assertEquals('Test Quiz', $quiz->title);
         $this->assertEquals(70, $quiz->passing_score);
         $this->assertNull($quiz->non_fillable_field);
+    }
+
+    /**
+     * Test mixed subtypes queried individually from the same database.
+     * Verifies Quiz::all() and Survey::all() both load subtype data correctly
+     * when both types exist in the same parent table.
+     */
+    public function testMixedSubtypesInDatabase(): void
+    {
+        // Create a quiz (type_id=1) and a survey (type_id=2) in the same parent table
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'My Quiz', 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 80, 'time_limit' => 60]
+        );
+
+        $this->createSurveyRecord(
+            ['id' => 2, 'title' => 'My Survey', 'type_id' => 2],
+            ['assessment_id' => 2, 'anonymous' => true, 'allow_multiple_responses' => true]
+        );
+
+        // Query each subtype separately — they share the parent table
+        $quizzes = Quiz::all();
+        $this->assertCount(2, $quizzes);
+        $quiz = $quizzes->first(fn ($q) => $q->title === 'My Quiz');
+        $this->assertNotNull($quiz);
+        $this->assertInstanceOf(Quiz::class, $quiz);
+        $this->assertEquals(80, $quiz->passing_score);
+        $this->assertEquals(60, $quiz->time_limit);
+
+        $surveys = Survey::all();
+        $this->assertCount(2, $surveys);
+        $survey = $surveys->first(fn ($s) => $s->title === 'My Survey');
+        $this->assertNotNull($survey);
+        $this->assertInstanceOf(Survey::class, $survey);
+        $this->assertEquals(1, $survey->anonymous);
+        $this->assertEquals(1, $survey->allow_multiple_responses);
+
+        // Parent query returns base Assessment instances that resolve subtype labels
+        $assessments = Assessment::all();
+        $this->assertCount(2, $assessments);
+
+        $quizAssessment = $assessments->first(fn ($a) => $a->title === 'My Quiz');
+        $this->assertEquals('quiz', $quizAssessment->getSubtypeLabel());
+
+        $surveyAssessment = $assessments->first(fn ($a) => $a->title === 'My Survey');
+        $this->assertEquals('survey', $surveyAssessment->getSubtypeLabel());
+    }
+
+    /**
+     * Test that missingConfiguration exception is thrown for missing subtypeKey.
+     */
+    public function testMissingConfigurationException(): void
+    {
+        $this->expectException(SubtypeException::class);
+        $this->expectExceptionMessage('Missing CTI configuration property $subtypeKey');
+
+        $model = new MisconfiguredAssessment();
+        $model->getSubtypeKey();
+    }
+
+    /**
+     * Test that typeResolutionFailed exception is thrown for unmapped label.
+     */
+    public function testTypeResolutionFailedException(): void
+    {
+        $this->expectException(SubtypeException::class);
+        $this->expectExceptionMessage("Could not resolve type ID for label 'nonexistent' in table 'assessment_type'");
+
+        throw SubtypeException::typeResolutionFailed('nonexistent', 'assessment_type');
+    }
+
+    /**
+     * Test whereNotIn query builder with subtype columns.
+     */
+    public function testWhereNotInWithSubtypeColumn(): void
+    {
+        $this->createQuizRecord(
+            ['id' => 1, 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 70]
+        );
+        $this->createQuizRecord(
+            ['id' => 2, 'type_id' => 1],
+            ['assessment_id' => 2, 'passing_score' => 80]
+        );
+        $this->createQuizRecord(
+            ['id' => 3, 'type_id' => 1],
+            ['assessment_id' => 3, 'passing_score' => 90]
+        );
+
+        $result = Quiz::whereNotIn('passing_score', [70, 90])->get();
+
+        $this->assertCount(1, $result);
+        $this->assertEquals(80, $result->first()->passing_score);
+    }
+
+    /**
+     * Test whereBetween query builder with subtype columns.
+     */
+    public function testWhereBetweenWithSubtypeColumn(): void
+    {
+        $this->createQuizRecord(
+            ['id' => 1, 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 60]
+        );
+        $this->createQuizRecord(
+            ['id' => 2, 'type_id' => 1],
+            ['assessment_id' => 2, 'passing_score' => 75]
+        );
+        $this->createQuizRecord(
+            ['id' => 3, 'type_id' => 1],
+            ['assessment_id' => 3, 'passing_score' => 95]
+        );
+
+        $result = Quiz::whereBetween('passing_score', [70, 90])->get();
+
+        $this->assertCount(1, $result);
+        $this->assertEquals(75, $result->first()->passing_score);
+    }
+
+    /**
+     * Test creating a survey sets the correct type_id automatically.
+     */
+    public function testCreateNewSurvey(): void
+    {
+        $survey = new Survey();
+        $survey->title = 'Test Survey';
+        $survey->description = 'A test survey';
+        $survey->anonymous = true;
+        $survey->allow_multiple_responses = false;
+
+        $this->assertTrue($survey->save());
+
+        $assessment = DB::table('assessment')->first();
+        $this->assertNotNull($assessment);
+        $this->assertEquals('Test Survey', $assessment->title);
+        $this->assertEquals(2, $assessment->type_id);
+
+        $surveyData = DB::table('assessment_survey')->first();
+        $this->assertNotNull($surveyData);
+        $this->assertEquals(1, $surveyData->anonymous);
+        $this->assertEquals(0, $surveyData->allow_multiple_responses);
+        $this->assertEquals($assessment->id, $surveyData->assessment_id);
     }
 }

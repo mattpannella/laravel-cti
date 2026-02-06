@@ -93,6 +93,41 @@ class SubtypeQueryBuilder extends Builder
     }
 
     /**
+     * Add a "where not in" clause to the query, handling subtype columns.
+     *
+     * @param string $column
+     * @param mixed $values
+     * @param string $boolean
+     * @return $this
+     */
+    public function whereNotIn($column, $values, $boolean = 'and'): self
+    {
+        if (is_string($column)) {
+            $this->addSubtypeJoinIfNeeded($column);
+        }
+
+        return parent::whereNotIn($column, $values, $boolean);
+    }
+
+    /**
+     * Add a "where between" clause to the query, handling subtype columns.
+     *
+     * @param string|\Illuminate\Database\Query\Expression $column
+     * @param iterable $values
+     * @param string $boolean
+     * @param bool $not
+     * @return $this
+     */
+    public function whereBetween($column, iterable $values, $boolean = 'and', $not = false): self
+    {
+        if (is_string($column)) {
+            $this->addSubtypeJoinIfNeeded($column);
+        }
+
+        return parent::whereBetween($column, $values, $boolean, $not);
+    }
+
+    /**
      * Add an "order by" clause to the query, handling subtype columns.
      *
      * @param string|\Closure|\Illuminate\Database\Query\Builder|\Illuminate\Database\Query\Expression $column

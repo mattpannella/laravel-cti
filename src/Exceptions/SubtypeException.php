@@ -4,7 +4,7 @@ namespace Pannella\Cti\Exceptions;
 
 /**
  * Exception class for subtype-specific errors.
- * 
+ *
  * Provides static factory methods for creating common subtype-related
  * error instances with descriptive messages.
  */
@@ -50,6 +50,30 @@ class SubtypeException extends CtiException
     public static function missingLookupTable(): self
     {
         return new static('Subtypes require a defined lookup table.');
+    }
+
+    /**
+     * Create an exception for a missing configuration property on a model.
+     *
+     * @param string $class The model class name
+     * @param string $property The missing property name
+     * @return static
+     */
+    public static function missingConfiguration(string $class, string $property): self
+    {
+        return new static("Missing CTI configuration property \${$property} on {$class}.");
+    }
+
+    /**
+     * Create an exception for failed type resolution from the lookup table.
+     *
+     * @param string $label The subtype label that could not be resolved
+     * @param string $table The lookup table that was queried
+     * @return static
+     */
+    public static function typeResolutionFailed(string $label, string $table): self
+    {
+        return new static("Could not resolve type ID for label '{$label}' in table '{$table}'.");
     }
 
     /**

@@ -2,7 +2,6 @@
 
 namespace Pannella\Cti\Traits;
 
-use Illuminate\Support\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Pannella\Cti\Exceptions\SubtypeException;
 use Pannella\Cti\Support\SubtypedCollection;
@@ -68,16 +67,18 @@ trait HasSubtypes
             return null;
         }
 
-        if (isset($cache[$typeId])) {
-            return $cache[$typeId];
-        }
-
         if (!static::$subtypeLookupTable) {
             throw SubtypeException::missingLookupTable();
         }
 
         try {
             $instance = new static();
+            $connectionName = $instance->getConnectionName() ?? 'default';
+
+            if (isset($cache[$connectionName][$typeId])) {
+                return $cache[$connectionName][$typeId];
+            }
+
             $type = $instance->getConnection()->table(static::$subtypeLookupTable)
                 ->where(static::$subtypeLookupKey, $typeId)
                 ->first();
@@ -88,7 +89,7 @@ trait HasSubtypes
                 throw SubtypeException::invalidSubtype((string) $typeId);
             }
 
-            $cache[$typeId] = $label;
+            $cache[$connectionName][$typeId] = $label;
             return $label;
         } catch (\Exception $e) {
             if ($e instanceof SubtypeException) {
@@ -96,48 +97,6 @@ trait HasSubtypes
             }
             throw new SubtypeException("Failed to resolve subtype: {$e->getMessage()}", 0, $e);
         }
-    }
-
-    /**
-     * Load subtype data for a collection or single model.
-     * Groups models by subtype, queries subtype tables in batches to avoid N+1.
-     *
-     * @return \Illuminate\Support\Collection
-     */
-    public function loadSubtypes(): Collection
-    {
-        //support both a Collection or single model instance
-        $collection = $this instanceof Collection ? $this : collect([$this]);
-
-        //group models by their subtype label, so we can eager load subtype data in batches
-        $grouped = $collection->groupBy(fn ($model) => $model->getSubtypeLabel());
-
-        foreach ($grouped as $label => $models) {
-            $class = static::$subtypeMap[$label] ?? null;
-            if (!$class) {
-                continue;
-            }
-
-            $instance = new $class;
-
-            $table = $instance->getTable();
-            $keyName = $instance->getKeyName();
-
-            //collect keys to query subtype data in batch
-            $keys = $models->pluck($keyName)->all();
-
-            $subdata = $this->getConnection()->table($table)->whereIn($keyName, $keys)->get()->keyBy($keyName);
-
-            foreach ($models as $model) {
-                $extra = $subdata[$model->getKey()] ?? null;
-                if ($extra) {
-                    //merge subtype attributes into the model
-                    $model->fill((array) $extra);
-                }
-            }
-        }
-
-        return $collection;
     }
 
     /**
