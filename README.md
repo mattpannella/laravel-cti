@@ -8,7 +8,7 @@ A Laravel package for implementing Class Table Inheritance pattern with Eloquent
 
 - Automatic model type resolution and instantiation
 - Seamless saving/updating across parent and subtype tables
-- Efficient bulk loading of subtype data
+- Automatic batch-loading of subtype data (no N+1 queries)
 - Support for Eloquent events and relationships
 - Full type safety and referential integrity
 
@@ -66,9 +66,14 @@ class Quiz extends SubtypeModel
 
 ### 3. Using the Models
 
+Subtype data is loaded automatically whenever models are fetched via `get()`, `paginate()`, `find()`, `all()`, etc. No manual calls required.
+
 ```php
-// Fetch with automatic subtype resolution
-$assessments = Assessment::all()->loadSubtypes();
+// Fetch with automatic subtype resolution and batch-loaded subtype data
+$assessments = Assessment::all();
+
+// Pagination works seamlessly — subtype data is batch-loaded for the page
+$assessments = Assessment::paginate(15);
 
 // Create new subtype instance
 $quiz = new Quiz();
@@ -86,6 +91,12 @@ $quiz->save();                     // updates only modified tables
 // Query using subtype attributes
 $quizzes = Quiz::where('passing_score', '>', 70)->get();
 ```
+
+### How It Works
+
+Both the parent model (via `HasSubtypes`) and subtype models (via `SubtypeModel`) return a `SubtypedCollection` from `newCollection()`. The collection's constructor automatically batch-loads subtype data using one query per subtype table, eliminating N+1 queries.
+
+**Note:** `cursor()` and `lazy()` bypass `newCollection()` and iterate models individually. For these paths, call `loadSubtypeData()` manually on each model.
 
 ## Configuration
 

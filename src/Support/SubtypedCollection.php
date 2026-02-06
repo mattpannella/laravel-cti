@@ -3,12 +3,13 @@
 namespace Pannella\Cti\Support;
 
 use Illuminate\Database\Eloquent\Collection;
+use Pannella\Cti\SubtypeModel;
 
 /**
- * Collection class with support for loading subtype data.
- * 
- * Extends Laravel's Collection to add functionality for loading
- * subtype-specific data for multiple models efficiently.
+ * Collection class with support for batch-loading subtype data.
+ *
+ * Extends Laravel's Collection to automatically load subtype-specific
+ * data for all models efficiently using batch queries instead of N+1.
  *
  * @template TKey of array-key
  * @template TModel of \Illuminate\Database\Eloquent\Model
@@ -17,77 +18,80 @@ use Illuminate\Database\Eloquent\Collection;
 class SubtypedCollection extends Collection
 {
     /**
-     * Load subtype data for all models in the collection.
-     * 
-     * Groups models by subtype and loads their subtype-specific data
-     * efficiently using as few queries as possible.
-     *
-     * @return \Pannella\Cti\Support\SubtypedCollection<TKey, TModel>
+     * @param array|mixed $items
      */
-    
+    public function __construct($items = [])
+    {
+        parent::__construct($items);
+        $this->loadSubtypes();
+    }
+
+    /**
+     * Batch-load subtype data for all SubtypeModel instances in the collection.
+     *
+     * Groups models by their concrete class and loads subtype-specific data
+     * from each subtype table in a single query per subtype, then fills each
+     * model with its subtype attributes.
+     *
+     * Uses plain arrays internally to avoid creating new SubtypedCollection
+     * instances (which would trigger infinite recursion via the constructor).
+     *
+     * @return $this
+     */
     public function loadSubtypes(): static
     {
         if ($this->isEmpty()) {
             return $this;
         }
 
-        // Group models by subtype label
-        $grouped = $this->groupBy(function ($model) {
-            return method_exists($model, 'getSubtypeLabel') ? $model->getSubtypeLabel() : null;
-        });
+        // Group eligible models by concrete class using a plain array
+        // to avoid filter()/groupBy() returning new SubtypedCollection instances
+        $grouped = [];
 
-        foreach ($grouped as $label => $models) {
-            $first = $models->first();
+        foreach ($this->items as $model) {
+            if (
+                $model instanceof SubtypeModel
+                && $model->getSubtypeTable()
+                && $model->getKey()
+            ) {
+                $grouped[get_class($model)][] = $model;
+            }
+        }
 
-            if (!method_exists($first, 'getSubtypeMap')) {
+        if (empty($grouped)) {
+            return $this;
+        }
+
+        foreach ($grouped as $class => $models) {
+            /** @var SubtypeModel $first */
+            $first = $models[0];
+            $subtypeTable = $first->getSubtypeTable();
+            $subtypeKeyName = $first->getSubtypeKeyName();
+            $primaryKeyName = $first->getKeyName();
+
+            // Collect keys for batch query
+            $keys = array_filter(array_map(
+                fn (SubtypeModel $m) => $m->getAttribute($primaryKeyName),
+                $models
+            ));
+
+            if (empty($keys)) {
                 continue;
             }
 
-            $map = $first->getSubtypeMap();
-            $subclass = $map[$label] ?? null;
-
-            if (!$subclass) {
-                continue;
-            }
-
-            /** \Pannella\Cti\SubtypeModel $subInstance */
-            $subInstance = new $subclass;
-            $baseTable = $subInstance->getTable(); // e.g. "assessments"
-            $keyName = $subInstance->getSubtypeKeyName();
-
-            // Use subtypeTable if it exists (e.g., "assessment_quiz")
-            $subtypeTable = $subInstance->getSubtypeTable();
-
-            if (!$subtypeTable) {
-                continue;
-            }
-
-            //collect model IDs
-            $ids = $models->pluck($subInstance->getKeyName())->all();
-
-            //fetch subtype rows in bulk
-            $subdata = $subInstance->getConnection()
+            // One query per subtype table
+            $subdata = $first->getConnection()
                 ->table($subtypeTable)
-                ->whereIn($keyName, $ids)
+                ->whereIn($subtypeKeyName, $keys)
                 ->get()
-                ->keyBy($keyName);
-            //replace each model with hydrated subtype
+                ->keyBy($subtypeKeyName);
+
+            // Fill each model with its subtype data
             foreach ($models as $model) {
-                $sub = (new $subclass)->newInstance([], true);
-                $sub->setRawAttributes($model->getAttributes(), true);
-                $sub->exists = true;
-
-                //preserve loaded relationships
-                $sub->setRelations($model->getRelations());
-
                 $extra = $subdata[$model->getKey()] ?? null;
                 if ($extra) {
-                    $sub->fill((array) $extra);
-                }
-
-                $index = $this->search($model, true);
-                if ($index !== false) {
-                    $this->items[$index] = $sub;
+                    $model->forceFill((array) $extra);
+                    $model->syncOriginal();
                 }
             }
         }

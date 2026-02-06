@@ -17,7 +17,7 @@ trait BootsSubtypeModel
         static::creating(function (SubtypeModel $model) {
             $modelClass = get_class($model); // E.g., YourApp\Models\Quiz
 
-            if (!property_exists($model, 'ctiParentClass') || empty($model->ctiParentClass)) {
+            if (empty($model->ctiParentClass)) {
                 return;
             }
 
@@ -38,10 +38,10 @@ trait BootsSubtypeModel
                         $lookupTable = $ctiParentClass->getSubtypeLookupTable();
                         $lookupKeyCol = $ctiParentClass->getSubtypeLookupKey();
                         $lookupLabelCol = $ctiParentClass->getSubtypeLookupLabel();
-                        
+
                         $typeId = $model->getConnection()->table($lookupTable)
-                                        ->where($lookupLabelCol, $label)
-                                        ->value($lookupKeyCol);
+                            ->where($lookupLabelCol, $label)
+                            ->value($lookupKeyCol);
 
                         if ($typeId !== null) {
                             $model->setAttribute($discriminatorColumn, $typeId);

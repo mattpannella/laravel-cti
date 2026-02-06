@@ -6,23 +6,22 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Database\Query\Builder;
 use Pannella\Cti\Exceptions\SubtypeException;
+use Pannella\Cti\Support\SubtypedCollection;
 use Pannella\Cti\Traits\HasSubtypeRelations;
 use Pannella\Cti\Traits\BootsSubtypeModel;
 
 /**
  * Base class for implementing Class Table Inheritance in Laravel models.
- * 
+ *
  * This abstract class extends Laravel's Model to support storing model data
  * across multiple tables in a class table inheritance pattern. The base/parent
  * class data is stored in one table while subtype-specific data is stored in
  * separate tables.
  *
  * @property string $subtypeTable Name of the table containing subtype-specific data
- * @property array $subtypeAttributes List of attributes that belong to the subtype table
+ * @property array<int, string> $subtypeAttributes List of attributes that belong to the subtype table
  * @property string|null $subtypeKeyName Foreign key column name in subtype table
  *
- * @method bool save(array $options = []) Save both parent and subtype data
- * @method bool delete() Delete both parent and subtype data
  */
 abstract class SubtypeModel extends Model
 {
@@ -34,34 +33,37 @@ abstract class SubtypeModel extends Model
     public const EVENT_SUBTYPE_DELETING = 'subtypeDeleting';
     public const EVENT_SUBTYPE_DELETED = 'subtypeDeleted';
 
-    //name of the subtype table (e.g. assessment_quiz)
+    /**
+     * @var string|null
+     */
     protected $subtypeTable;
 
-    //attributes that belong to the subtype table
+    /**
+     * @var array<int, string>
+     */
     protected $subtypeAttributes = [];
 
-    //optionally override if subtype PK column name differs from parent PK
+    /**
+     * @var string|null
+     */
     protected $subtypeKeyName;
 
-    //required to be able to create new records in the supertype table
+    /**
+     * @var class-string|null
+     */
     protected $ctiParentClass;
 
     /**
      * The event map for the model.
      *
-     * @var array
+     * @var array<string, class-string>
      */
-    protected $dispatchesEvents = [
-        'subtypeSaving' => null,
-        'subtypeSaved' => null,
-        'subtypeDeleting' => null,
-        'subtypeDeleted' => null,
-    ];
+    protected $dispatchesEvents = [];
 
     /**
      * Save both parent and subtype data inside a database transaction.
      *
-     * @param array $options Save options passed to parent save method
+     * @param array<string, mixed> $options Save options passed to parent save method
      * @return bool Whether the save was successful
      * @throws SubtypeException When saving subtype data fails
      */
@@ -85,9 +87,9 @@ abstract class SubtypeModel extends Model
                 $dirtyAttributes,
                 $this->getParentAttributes()
             );
-            
+
             $dirtySubtypeAttributes = array_intersect_key(
-                $dirtyAttributes, 
+                $dirtyAttributes,
                 array_flip($this->getSubtypeAttributes())
             );
 
@@ -99,24 +101,24 @@ abstract class SubtypeModel extends Model
             if ($saved) {
                 //get any changes from parent save
                 $parentSaveChanges = array_diff_key($this->attributes, $originalAttributesArray);
-                    
+
                 //restore full attribute set
                 $this->attributes = array_merge(
                     $originalAttributesArray,
                     $parentSaveChanges
                 );
-                    
+
                 //save subtype data if we have any
                 if (!empty($dirtySubtypeAttributes)) {
                     $this->saveSubtypeData();
                 }
-                    
+
                 //reload data to ensure consistency
                 if ($this->ctiParentClass && class_exists($this->ctiParentClass)) {
                     $parentModel = (new $this->ctiParentClass)->newQuery()
                         ->where($this->getKeyName(), $this->getKey())
                         ->first();
-                        
+
                     if ($parentModel) {
                         foreach ($parentModel->getAttributes() as $key => $value) {
                             if (!in_array($key, $this->getSubtypeAttributes())) {
@@ -125,7 +127,7 @@ abstract class SubtypeModel extends Model
                         }
                     }
                 }
-                    
+
                 $this->loadSubtypeData();
                 //sync original attributes after loading all data
                 $this->syncOriginal();
@@ -166,19 +168,15 @@ abstract class SubtypeModel extends Model
 
             //check if a record already exists for this model in the subtype table
             if ($this->getConnection()->table($this->subtypeTable)->where($keyName, $key)->exists()) {
-                $updated = $this->getConnection()->table($this->subtypeTable)
+                $this->getConnection()->table($this->subtypeTable)
                     ->where($keyName, $key)
                     ->update($data);
-                
-                if ($updated === false) {
-                    throw SubtypeException::saveFailed($this->subtypeTable);
-                }
             } else {
                 //insert a new record
                 //merge the primary key into the data array to maintain the relationship
                 $inserted = $this->getConnection()->table($this->subtypeTable)
                     ->insert(array_merge([$keyName => $key], $data));
-                
+
                 if (!$inserted) {
                     throw SubtypeException::saveFailed($this->subtypeTable);
                 }
@@ -211,13 +209,9 @@ abstract class SubtypeModel extends Model
                     throw SubtypeException::missingTypeId(static::class);
                 }
 
-                $deleted = $this->getConnection()->table($this->subtypeTable)
+                $this->getConnection()->table($this->subtypeTable)
                     ->where($keyName, $this->getKey())
                     ->delete();
-
-                if ($deleted === false) {
-                    throw new SubtypeException("Failed to delete subtype data from {$this->subtypeTable}");
-                }
 
                 $this->fireModelEvent('subtypeDeleted');
             }
@@ -268,37 +262,21 @@ abstract class SubtypeModel extends Model
     }
 
     /**
-     * Force fill attributes, ensuring subtype attributes are properly set.
-     *
-     * @param array $attributes Attributes to fill
-     * @return $this
-     */
-    public function forceFill(array $attributes): self
-    {
-        foreach ($attributes as $key => $value) {
-            if (in_array($key, $this->subtypeAttributes)) {
-                $this->setAttribute($key, $value);
-            }
-        }
-
-        return parent::forceFill($attributes);
-    }
-
-    /**
      * Create a new Eloquent query builder for the model.
      *
      * @param \Illuminate\Database\Query\Builder $query
-     * @return \Pannella\Cti\SubtypeQueryBuilder
+     * @return \Pannella\Cti\SubtypeQueryBuilder<static>
      */
     public function newEloquentBuilder($query): SubtypeQueryBuilder
     {
+        /** @var SubtypeQueryBuilder<static> */
         return new SubtypeQueryBuilder($query);
     }
 
     /**
      * Get the list of attributes that belong to the subtype table.
      *
-     * @return array
+     * @return array<int, string>
      */
     public function getSubtypeAttributes(): array
     {
@@ -320,7 +298,7 @@ abstract class SubtypeModel extends Model
      *
      * @return string
      */
-    public function getSubtypeKeyName(): string 
+    public function getSubtypeKeyName(): string
     {
         return $this->subtypeKeyName ?? $this->getKeyName();
     }
@@ -346,7 +324,7 @@ abstract class SubtypeModel extends Model
     /**
      * Create a new instance of the given model.
      *
-     * @param array $attributes
+     * @param array<string, mixed> $attributes
      * @param bool $exists
      * @return static
      */
@@ -364,35 +342,27 @@ abstract class SubtypeModel extends Model
     }
 
     /**
-     * Create a new model instance that is existing.
-     * Overridden to ensure subtype data is loaded.
+     * Create a new collection instance with subtype support.
      *
-     * @param array $attributes
-     * @param string|null $connection
-     * @return static
+     * @param array<int, \Illuminate\Database\Eloquent\Model> $models Array of models to include in collection
+     * @return \Pannella\Cti\Support\SubtypedCollection<int, static>
      */
-    public function newFromBuilder($attributes = [], $connection = null)
+    public function newCollection(array $models = [])
     {
-        $instance = parent::newFromBuilder($attributes, $connection);
-        
-        //load subtype data for single model instances
-        if ($instance->exists && $instance->getKey()) {
-            $instance->loadSubtypeData();
-        }
-
-        return $instance;
+        /** @var SubtypedCollection<int, static> */
+        return new SubtypedCollection($models);
     }
 
     /**
      * Create a new instance of the model being queried.
      * Overridden to ensure subtype configuration is preserved.
      *
-     * @param array $attributes
+     * @param array<string, mixed> $attributes
      * @return static
      */
     public function newModelInstance($attributes = [])
     {
-        $model = parent::newModelInstance($attributes);
+        $model = parent::newInstance($attributes);
 
         //if we're copying an existing model's data, load its subtype data
         if (!empty($attributes) && isset($attributes[$this->getKeyName()])) {
@@ -405,16 +375,16 @@ abstract class SubtypeModel extends Model
     /**
      * Create a copy of the model.
      *
-     * @param array|null $except
+     * @param array<int, string>|null $except
      * @return static
      */
-    public function replicate(array $except = null)
+    public function replicate(?array $except = [])
     {
         //ensure the subtype foreign key is in the $except array
         if (!$except) {
             $except = [];
         }
-        
+
         //add the subtype's foreign key to $except
         $subtypeKeyName = $this->getSubtypeKeyName();
         if (!in_array($subtypeKeyName, $except)) {
@@ -500,7 +470,7 @@ abstract class SubtypeModel extends Model
     /**
      * Get parent attributes excluding subtype attributes.
      *
-     * @return array
+     * @return array<string, mixed>
      */
     protected function getParentAttributes(): array
     {
@@ -508,9 +478,9 @@ abstract class SubtypeModel extends Model
         if ($this->subtypeKeyName) {
             $excludeColumns[] = $this->subtypeKeyName;
         }
-        
+
         return array_diff_key(
-            $this->getAttributes(), 
+            $this->getAttributes(),
             array_flip($excludeColumns)
         );
     }

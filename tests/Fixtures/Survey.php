@@ -4,22 +4,22 @@ namespace Pannella\Cti\Tests\Fixtures;
 
 use Pannella\Cti\SubtypeModel;
 
-class Quiz extends SubtypeModel
+class Survey extends SubtypeModel
 {
     protected $table = "assessment";
     protected $primaryKey = "id";
-    protected $subtypeTable = 'assessment_quiz';
+    protected $subtypeTable = 'assessment_survey';
     protected $subtypeKeyName = 'assessment_id';
     protected $ctiParentClass = Assessment::class;
 
     protected $subtypeAttributes = [
-        'passing_score',
-        'time_limit',
-        'show_correct_answers'
+        'anonymous',
+        'allow_multiple_responses',
     ];
 
     protected $attributes = [
-        'show_correct_answers' => false
+        'anonymous' => false,
+        'allow_multiple_responses' => false,
     ];
 
     protected $fillable = [
@@ -27,8 +27,7 @@ class Quiz extends SubtypeModel
         'title',
         'description',
         'enabled',
-        'passing_score',
-        'time_limit',
-        'show_correct_answers'
+        'anonymous',
+        'allow_multiple_responses',
     ];
 }

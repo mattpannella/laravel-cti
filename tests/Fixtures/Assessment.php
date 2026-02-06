@@ -10,10 +10,11 @@ class Assessment extends Model
     use HasSubtypes;
 
     protected $table = 'assessment';
-    
+
     // Required static properties for CTI to work
     protected static $subtypeMap = [
-        'quiz' => Quiz::class
+        'quiz' => Quiz::class,
+        'survey' => Survey::class,
     ];
 
     protected $fillable = [
@@ -22,7 +23,7 @@ class Assessment extends Model
         'description',
         'enabled'
     ];
-    
+
     protected static $subtypeKey = 'type_id';
     protected static $subtypeLookupTable = 'assessment_type';
     protected static $subtypeLookupKey = 'id';
