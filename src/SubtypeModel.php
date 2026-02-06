@@ -22,8 +22,6 @@ use Pannella\Cti\Traits\BootsSubtypeModel;
  * @property array $subtypeAttributes List of attributes that belong to the subtype table
  * @property string|null $subtypeKeyName Foreign key column name in subtype table
  *
- * @method bool save(array $options = []) Save both parent and subtype data
- * @method bool delete() Delete both parent and subtype data
  */
 abstract class SubtypeModel extends Model
 {
