@@ -61,6 +61,34 @@ abstract class SubtypeModel extends Model
     protected $dispatchesEvents = [];
 
     /**
+     * Create a new model instance from builder results.
+     * Merges parent model casts if $ctiParentClass is defined.
+     *
+     * @param array<string, mixed> $attributes
+     * @param string|null $connection
+     * @return static
+     */
+    public function newFromBuilder($attributes = [], $connection = null)
+    {
+        $model = parent::newFromBuilder($attributes, $connection);
+
+        // Merge parent casts if parent class is defined
+        if ($model->ctiParentClass && class_exists($model->ctiParentClass)) {
+            $parent = new $model->ctiParentClass();
+            $model->mergeCasts($parent->getCasts());
+
+            // Apply casts to loaded attributes
+            foreach ((array)$attributes as $key => $value) {
+                if ($model->hasCast($key)) {
+                    $model->setAttribute($key, $value);
+                }
+            }
+        }
+
+        return $model;
+    }
+
+    /**
      * Save both parent and subtype data inside a database transaction.
      *
      * @param array<string, mixed> $options Save options passed to parent save method
@@ -483,5 +511,49 @@ abstract class SubtypeModel extends Model
             $this->getAttributes(),
             array_flip($excludeColumns)
         );
+    }
+
+    /**
+     * Handle dynamic method calls to proxy parent model relationships.
+     * If the method doesn't exist on this model but exists on the parent CTI class,
+     * proxy the call to the parent model to access parent relationships.
+     *
+     * @param string $method
+     * @param array<int, mixed> $parameters
+     * @return mixed
+     * @throws \BadMethodCallException
+     */
+    public function __call($method, $parameters)
+    {
+        // First, try to handle via parent Model class (scopes, relationships, etc.)
+        try {
+            return parent::__call($method, $parameters);
+        } catch (\BadMethodCallException $e) {
+            // If parent Model couldn't handle it, try parent CTI class
+            if ($this->ctiParentClass && class_exists($this->ctiParentClass)) {
+                $parentModel = new $this->ctiParentClass();
+
+                // Transfer state to parent model so relationships work correctly
+                $parentModel->setRawAttributes($this->getAttributes(), true);
+                $parentModel->exists = $this->exists;
+                $parentModel->setConnection($this->getConnectionName());
+
+                // Check if method exists and call it
+                if (method_exists($parentModel, $method)) {
+                    $result = $parentModel->$method(...$parameters);
+
+                    // If it's a relation, return it (relationships return Relation instances)
+                    if ($result instanceof \Illuminate\Database\Eloquent\Relations\Relation) {
+                        return $result;
+                    }
+
+                    // For non-relation results, also return them
+                    return $result;
+                }
+            }
+
+            // Re-throw original exception if we couldn't handle it
+            throw $e;
+        }
     }
 }

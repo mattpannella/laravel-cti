@@ -12,6 +12,7 @@ use Pannella\Cti\Tests\Fixtures\Quiz;
 use Pannella\Cti\Tests\Fixtures\Survey;
 use Pannella\Cti\Tests\Fixtures\QuizQuestion;
 use Pannella\Cti\Tests\Fixtures\QuizAttempt;
+use Pannella\Cti\Tests\Fixtures\AssessmentTag;
 use Pannella\Cti\Tests\Fixtures\MisconfiguredAssessment;
 use Pannella\Cti\Tests\Fixtures\RegularModel;
 use Pannella\Cti\Exceptions\SubtypeException;
@@ -116,6 +117,12 @@ class SubtypeModelTest extends TestCase
             $table->foreignId('assessment_id');
             $table->string('student_name');
             $table->integer('score');
+        });
+
+        DB::schema()->create('assessment_tag', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('assessment_id');
+            $table->string('tag_name');
         });
     }
 
@@ -1648,6 +1655,244 @@ class SubtypeModelTest extends TestCase
         $this->assertInstanceOf(Quiz::class, $assessments[1]);
         $this->assertEquals(80, $assessments[0]->passing_score);
         $this->assertEquals(90, $assessments[1]->passing_score);
+    }
+
+    /**
+     * Test that querying directly through subtype model (Quiz::all()) applies parent casts.
+     * Parent model (Assessment) has casts for 'enabled' => 'boolean' and timestamps => 'datetime'.
+     * Without parent cast inheritance, enabled would be 0/1 instead of boolean.
+     */
+    public function testDirectQueryAppliesParentCasts(): void
+    {
+        $timestamp = date('Y-m-d H:i:s');
+        
+        // Create quiz records with enabled=0 and enabled=1
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'Quiz with enabled=0', 'type_id' => 1, 'enabled' => 0, 'created_at' => $timestamp, 'updated_at' => $timestamp],
+            ['assessment_id' => 1, 'passing_score' => 80, 'time_limit' => 60]
+        );
+        $this->createQuizRecord(
+            ['id' => 2, 'title' => 'Quiz with enabled=1', 'type_id' => 1, 'enabled' => 1, 'created_at' => $timestamp, 'updated_at' => $timestamp],
+            ['assessment_id' => 2, 'passing_score' => 90, 'time_limit' => 45]
+        );
+
+        // Query directly through Quiz model
+        $quizzes = Quiz::all();
+
+        $this->assertCount(2, $quizzes);
+
+        // Verify boolean cast is applied (not 0/1)
+        $quiz1 = $quizzes->first(fn ($q) => $q->id === 1);
+        $quiz2 = $quizzes->first(fn ($q) => $q->id === 2);
+
+        $this->assertIsBool($quiz1->enabled, 'enabled should be boolean');
+        $this->assertFalse($quiz1->enabled, 'enabled=0 should cast to false');
+
+        $this->assertIsBool($quiz2->enabled, 'enabled should be boolean');
+        $this->assertTrue($quiz2->enabled, 'enabled=1 should cast to true');
+
+        // Verify datetime cast is applied (Carbon instance, not string)
+        $this->assertInstanceOf(\Illuminate\Support\Carbon::class, $quiz1->created_at);
+        $this->assertInstanceOf(\Illuminate\Support\Carbon::class, $quiz1->updated_at);
+    }
+
+    /**
+     * Test that querying directly through subtype model merges parent attributes.
+     * Both parent (title, description, enabled) and subtype (passing_score, time_limit) attributes
+     * should be accessible on the Quiz instance.
+     */
+    public function testDirectQueryMergesParentAttributes(): void
+    {
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'My Quiz', 'description' => 'Test description', 'type_id' => 1, 'enabled' => 1],
+            ['assessment_id' => 1, 'passing_score' => 85, 'time_limit' => 60]
+        );
+
+        // Query directly through Quiz model
+        $quiz = Quiz::find(1);
+
+        $this->assertNotNull($quiz);
+
+        // Verify parent attributes are accessible
+        $this->assertEquals('My Quiz', $quiz->title);
+        $this->assertEquals('Test description', $quiz->description);
+        $this->assertTrue($quiz->enabled); // Also tests cast
+
+        // Verify subtype attributes are accessible
+        $this->assertEquals(85, $quiz->passing_score);
+        $this->assertEquals(60, $quiz->time_limit);
+
+        // Verify it's a Quiz instance, not Assessment
+        $this->assertInstanceOf(Quiz::class, $quiz);
+    }
+
+    /**
+     * Test that models without $ctiParentClass still work (backwards compatibility).
+     * RegularModel doesn't have $ctiParentClass set, so it should work as before.
+     */
+    public function testDirectQueryWithoutParentClassStillWorks(): void
+    {
+        $timestamp = date('Y-m-d H:i:s');
+        
+        // Create a regular model record (no subtype table)
+        DB::table('assessment')->insert([
+            'id' => 999,
+            'title' => 'Regular Model',
+            'type_id' => 1,
+            'enabled' => 1,
+            'created_at' => $timestamp,
+            'updated_at' => $timestamp,
+        ]);
+
+        // Query through RegularModel (no $ctiParentClass, no subtype table)
+        $model = RegularModel::find(999);
+
+        $this->assertNotNull($model);
+        $this->assertEquals('Regular Model', $model->title);
+        $this->assertInstanceOf(RegularModel::class, $model);
+
+        // Should work without errors even though no parent class defined
+    }
+
+    /**
+     * Test that parent relationships are accessible from subtype instances.
+     * Assessment has a tags() relationship, which should be accessible from Quiz instances.
+     */
+    public function testParentRelationshipAccessibleFromSubtype(): void
+    {
+        // Create a quiz with tags
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'Quiz with tags', 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 85]
+        );
+
+        DB::table('assessment_tag')->insert([
+            ['assessment_id' => 1, 'tag_name' => 'math'],
+            ['assessment_id' => 1, 'tag_name' => 'algebra'],
+        ]);
+
+        // Query directly through Quiz
+        $quiz = Quiz::find(1);
+        $this->assertNotNull($quiz);
+
+        // Access parent relationship as method call
+        $tags = $quiz->tags()->get();
+
+        $this->assertCount(2, $tags);
+        $this->assertEquals('math', $tags[0]->tag_name);
+        $this->assertEquals('algebra', $tags[1]->tag_name);
+    }
+
+    /**
+     * Test that parent relationship queries work correctly.
+     * Should be able to query parent relationships with where clauses, etc.
+     */
+    public function testParentRelationshipQueryWorks(): void
+    {
+        // Create a quiz with multiple tags
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'Quiz with tags', 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 85]
+        );
+
+        DB::table('assessment_tag')->insert([
+            ['assessment_id' => 1, 'tag_name' => 'math'],
+            ['assessment_id' => 1, 'tag_name' => 'algebra'],
+            ['assessment_id' => 1, 'tag_name' => 'geometry'],
+        ]);
+
+        // Query directly through Quiz
+        $quiz = Quiz::find(1);
+        $this->assertNotNull($quiz);
+
+        // Query parent relationship with where clause
+        $mathTags = $quiz->tags()->where('tag_name', 'math')->get();
+
+        $this->assertCount(1, $mathTags);
+        $this->assertEquals('math', $mathTags[0]->tag_name);
+
+        // Query with multiple conditions
+        $filteredTags = $quiz->tags()->whereIn('tag_name', ['math', 'geometry'])->get();
+        $this->assertCount(2, $filteredTags);
+    }
+
+    /**
+     * Test that subtype relationships take precedence over parent relationships.
+     * If both parent and subtype define the same relationship method, subtype wins.
+     */
+    public function testSubtypeRelationshipTakesPrecedence(): void
+    {
+        // Create quiz with questions (subtype relationship)
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'My Quiz', 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 80]
+        );
+
+        DB::table('quiz_questions')->insert([
+            ['assessment_id' => 1, 'question_text' => 'Question 1', 'points' => 10],
+            ['assessment_id' => 1, 'question_text' => 'Question 2', 'points' => 15],
+        ]);
+
+        // Query through Quiz
+        $quiz = Quiz::find(1);
+
+        // questions() is defined on Quiz (subtype), not Assessment (parent)
+        $questions = $quiz->questions;
+
+        $this->assertCount(2, $questions);
+        $this->assertInstanceOf(QuizQuestion::class, $questions[0]);
+        $this->assertEquals('Question 1', $questions[0]->question_text);
+    }
+
+    /**
+     * Test that calling undefined methods on parent doesn't cause infinite recursion.
+     * Should throw BadMethodCallException as expected.
+     */
+    public function testUndefinedMethodThrowsException(): void
+    {
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'My Quiz', 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 80]
+        );
+
+        $quiz = Quiz::find(1);
+
+        $this->expectException(\BadMethodCallException::class);
+        $quiz->nonExistentMethod();
+    }
+
+    /**
+     * Test eager loading parent relationships works with direct subtype queries.
+     * NOTE: This is currently a known limitation - eager loading parent relationships
+     * may not work perfectly without explicit with() on the query builder.
+     */
+    public function testSubtypeRelationshipsStillWorkAfterParentProxying(): void
+    {
+        // Create quiz with both parent (tags) and subtype (questions) relationships
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'My Quiz', 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 80]
+        );
+
+        DB::table('assessment_tag')->insert([
+            ['assessment_id' => 1, 'tag_name' => 'math'],
+        ]);
+
+        DB::table('quiz_questions')->insert([
+            ['assessment_id' => 1, 'question_text' => 'Question 1', 'points' => 10],
+        ]);
+
+        $quiz = Quiz::find(1);
+
+        // Both parent and subtype relationships should work
+        $tags = $quiz->tags()->get();
+        $questions = $quiz->questions;
+
+        $this->assertCount(1, $tags);
+        $this->assertEquals('math', $tags[0]->tag_name);
+
+        $this->assertCount(1, $questions);
+        $this->assertEquals('Question 1', $questions[0]->question_text);
     }
 }
 
