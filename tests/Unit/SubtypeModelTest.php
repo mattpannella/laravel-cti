@@ -18,7 +18,9 @@ use Pannella\Cti\Tests\Fixtures\Student;
 use Pannella\Cti\Tests\Fixtures\AssessmentTag;
 use Pannella\Cti\Tests\Fixtures\MisconfiguredAssessment;
 use Pannella\Cti\Tests\Fixtures\RegularModel;
+use Pannella\Cti\Tests\Fixtures\OverlappingColumnsQuiz;
 use Pannella\Cti\Exceptions\SubtypeException;
+use Pannella\Cti\SubtypeModel;
 use Illuminate\Database\Eloquent\Model;
 
 class SubtypeModelTest extends TestCase
@@ -72,7 +74,11 @@ class SubtypeModelTest extends TestCase
         Quiz::clearBootedModels();
         Survey::clearBootedModels();
         Assessment::clearBootedModels();
+        OverlappingColumnsQuiz::clearBootedModels();
         Model::unsetEventDispatcher();
+
+        // Reset the validation cache between tests
+        $this->resetValidationCache();
 
         $this->db = null;
         $this->dispatcher = null;
@@ -2413,6 +2419,137 @@ class SubtypeModelTest extends TestCase
         $scores = Quiz::all()->pluck('passing_score')->all();
 
         $this->assertEquals([70, 80, 90], $scores);
+    }
+
+    // ============================================================
+    // Overlapping Column Validation Tests
+    // ============================================================
+
+    /**
+     * Reset the static validation cache via reflection.
+     */
+    protected function resetValidationCache(): void
+    {
+        $ref = new \ReflectionProperty(SubtypeModel::class, 'validatedSubtypeColumns');
+        $ref->setAccessible(true);
+        $ref->setValue(null, []);
+    }
+
+    /**
+     * Test that overlapping columns throw SubtypeException on save().
+     */
+    public function testOverlappingColumnsThrowOnSave(): void
+    {
+        $this->expectException(SubtypeException::class);
+        $this->expectExceptionMessage('overlap with parent table columns: title');
+
+        $model = new OverlappingColumnsQuiz();
+        $model->title = 'Test';
+        $model->passing_score = 80;
+        $model->save();
+    }
+
+    /**
+     * Test that overlapping columns throw SubtypeException on loadSubtypeData().
+     */
+    public function testOverlappingColumnsThrowOnLoadSubtypeData(): void
+    {
+        $this->expectException(SubtypeException::class);
+        $this->expectExceptionMessage('overlap with parent table columns: title');
+
+        $model = new OverlappingColumnsQuiz();
+        $model->id = 1;
+        $model->exists = true;
+        $model->loadSubtypeData();
+    }
+
+    /**
+     * Test that non-overlapping columns pass validation without error.
+     */
+    public function testNonOverlappingColumnsPassValidation(): void
+    {
+        $quiz = new Quiz();
+        $quiz->title = 'Valid Quiz';
+        $quiz->passing_score = 80;
+
+        // Should not throw — Quiz's subtypeAttributes don't overlap with parent columns
+        $saved = $quiz->save();
+        $this->assertTrue($saved);
+    }
+
+    /**
+     * Test that validation result is cached (schema query runs only once).
+     */
+    public function testValidationResultIsCached(): void
+    {
+        DB::connection()->enableQueryLog();
+
+        // First save triggers validation (schema query)
+        $quiz1 = new Quiz();
+        $quiz1->title = 'Quiz 1';
+        $quiz1->passing_score = 80;
+        $quiz1->save();
+
+        $logAfterFirst = DB::connection()->getQueryLog();
+        $schemaQueriesFirst = array_filter($logAfterFirst, fn ($q) =>
+            stripos($q['query'], 'pragma') !== false
+            || stripos($q['query'], 'column_listing') !== false
+            || stripos($q['query'], 'information_schema') !== false
+            || stripos($q['query'], 'table_info') !== false
+        );
+        $firstCount = count($schemaQueriesFirst);
+
+        // Reset query log for second save
+        DB::connection()->flushQueryLog();
+        DB::connection()->enableQueryLog();
+
+        // Second save should use cache — no additional schema queries
+        $quiz2 = new Quiz();
+        $quiz2->title = 'Quiz 2';
+        $quiz2->passing_score = 90;
+        $quiz2->save();
+
+        $logAfterSecond = DB::connection()->getQueryLog();
+        $schemaQueriesSecond = array_filter($logAfterSecond, fn ($q) =>
+            stripos($q['query'], 'pragma') !== false
+            || stripos($q['query'], 'column_listing') !== false
+            || stripos($q['query'], 'information_schema') !== false
+            || stripos($q['query'], 'table_info') !== false
+        );
+        $secondCount = count($schemaQueriesSecond);
+
+        // The second save should have fewer (zero) schema queries
+        $this->assertLessThan($firstCount, $secondCount, 'Cached validation should not run schema queries again');
+    }
+
+    /**
+     * Test that validation is skipped gracefully when schema check fails.
+     */
+    public function testValidationSkipsGracefullyOnSchemaFailure(): void
+    {
+        // Create an anonymous subtype model pointing to a non-existent table
+        $model = new class extends SubtypeModel {
+            protected $table = 'nonexistent_parent_table';
+            protected $subtypeTable = 'nonexistent_subtype_table';
+            protected $subtypeAttributes = ['some_column'];
+        };
+
+        // Should not throw — schema check failure is caught and skipped
+        $model->validateSubtypeColumns();
+        $this->assertTrue(true, 'Validation should complete without error');
+    }
+
+    /**
+     * Test SubtypeException::overlappingColumns() message format.
+     */
+    public function testOverlappingColumnsExceptionMessage(): void
+    {
+        $exception = SubtypeException::overlappingColumns('App\\Models\\Foo', ['title', 'description']);
+
+        $this->assertInstanceOf(SubtypeException::class, $exception);
+        $this->assertStringContainsString('App\\Models\\Foo', $exception->getMessage());
+        $this->assertStringContainsString('title, description', $exception->getMessage());
+        $this->assertStringContainsString('Subtype attributes must be unique', $exception->getMessage());
     }
 }
 

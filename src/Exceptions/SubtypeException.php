@@ -86,4 +86,21 @@ class SubtypeException extends CtiException
     {
         return new self("Failed to save subtype data to table: {$table}");
     }
+
+    /**
+     * Create an exception for overlapping columns between parent and subtype tables.
+     *
+     * @param string $class The model class name
+     * @param array<int, string> $columns The overlapping column names
+     * @return self
+     */
+    public static function overlappingColumns(string $class, array $columns): self
+    {
+        $cols = implode(', ', $columns);
+
+        return new self(
+            "{$class} has \$subtypeAttributes that overlap with parent table columns: {$cols}. "
+            . "Subtype attributes must be unique to the subtype table."
+        );
+    }
 }

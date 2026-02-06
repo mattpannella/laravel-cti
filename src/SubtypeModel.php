@@ -54,6 +54,13 @@ abstract class SubtypeModel extends Model
     protected $ctiParentClass;
 
     /**
+     * Cache of classes that have already passed subtype column validation.
+     *
+     * @var array<class-string, true>
+     */
+    protected static array $validatedSubtypeColumns = [];
+
+    /**
      * The event map for the model.
      *
      * @var array<string, class-string>
@@ -97,6 +104,8 @@ abstract class SubtypeModel extends Model
      */
     public function save(array $options = []): bool
     {
+        $this->validateSubtypeColumns();
+
         //if subtypeTable is not defined, or no subtypeAttributes, treat as a normal model save.
         if (empty($this->subtypeTable) || empty($this->subtypeAttributes)) {
             return parent::save($options);
@@ -261,6 +270,8 @@ abstract class SubtypeModel extends Model
      */
     public function loadSubtypeData(): void
     {
+        $this->validateSubtypeColumns();
+
         if (!$this->subtypeTable) {
             throw SubtypeException::missingTable();
         }
@@ -511,6 +522,48 @@ abstract class SubtypeModel extends Model
             $this->getAttributes(),
             array_flip($excludeColumns)
         );
+    }
+
+    /**
+     * Validate that $subtypeAttributes do not overlap with parent table columns.
+     *
+     * Uses a per-class static cache so the schema query runs at most once per
+     * model class per request. Silently skips validation if the schema check
+     * fails (e.g. table doesn't exist yet during migrations).
+     *
+     * @throws SubtypeException When overlapping columns are detected
+     * @return void
+     */
+    public function validateSubtypeColumns(): void
+    {
+        $class = static::class;
+
+        if (isset(static::$validatedSubtypeColumns[$class])) {
+            return;
+        }
+
+        if (empty($this->subtypeTable) || empty($this->subtypeAttributes)) {
+            static::$validatedSubtypeColumns[$class] = true;
+            return;
+        }
+
+        try {
+            $parentColumns = $this->getConnection()
+                ->getSchemaBuilder()
+                ->getColumnListing($this->getTable());
+
+            $overlap = array_intersect($this->subtypeAttributes, $parentColumns);
+
+            if (!empty($overlap)) {
+                throw SubtypeException::overlappingColumns($class, array_values($overlap));
+            }
+        } catch (SubtypeException $e) {
+            throw $e;
+        } catch (\Exception $e) {
+            // Schema check failed (table doesn't exist yet, etc.) — skip validation
+        }
+
+        static::$validatedSubtypeColumns[$class] = true;
     }
 
     /**

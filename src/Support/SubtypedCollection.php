@@ -80,6 +80,7 @@ class SubtypedCollection extends Collection
         foreach ($grouped as $class => $models) {
             /** @var SubtypeModel $first */
             $first = $models[0];
+            $first->validateSubtypeColumns();
             $subtypeTable = $first->getSubtypeTable();
             $subtypeKeyName = $first->getSubtypeKeyName();
             $primaryKeyName = $first->getKeyName();
