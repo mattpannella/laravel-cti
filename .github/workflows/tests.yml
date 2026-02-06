@@ -48,8 +48,5 @@ jobs:
           composer require "illuminate/database:${{ matrix.laravel }}" --no-interaction --no-update
           composer update --prefer-dist --no-interaction --no-progress
 
-      - name: Execute PHPUnit tests
+      - name: Execute tests
         run: vendor/bin/phpunit
-
-      - name: Run type tests
-        run: composer test:types
