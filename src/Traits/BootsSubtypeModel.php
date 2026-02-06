@@ -17,7 +17,7 @@ trait BootsSubtypeModel
         static::creating(function (SubtypeModel $model) {
             $modelClass = get_class($model); // E.g., YourApp\Models\Quiz
 
-            if (!property_exists($model, 'ctiParentClass') || empty($model->ctiParentClass)) {
+            if (empty($model->ctiParentClass)) {
                 return;
             }
 

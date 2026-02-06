@@ -1,0 +1,13 @@
+includes:
+    - vendor/nesbot/carbon/extension.neon
+
+parameters:
+
+    paths:
+        - src/
+
+    # Level 10 is the highest level
+    level: 6
+
+    ignoreErrors:
+        - '#Trait Pannella\\Cti\\Traits\\HasSubtypes is used zero times and is not analysed\.#'

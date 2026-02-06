@@ -10,6 +10,9 @@ use Illuminate\Database\Eloquent\Builder;
  * Extends Laravel's query builder to automatically join subtype tables
  * when querying subtype-specific columns. This allows seamless querying
  * across both parent and subtype tables.
+ *
+ * @template TModel of \Illuminate\Database\Eloquent\Model
+ * @extends Builder<TModel>
  */
 class SubtypeQueryBuilder extends Builder
 {
@@ -59,7 +62,7 @@ class SubtypeQueryBuilder extends Builder
     /**
      * Add basic where clause to the query, handling subtype columns.
      *
-     * @param string|array|\Closure $column
+     * @param \Closure|string|array<mixed> $column
      * @param mixed $operator
      * @param mixed $value
      * @param string $boolean
@@ -85,10 +88,12 @@ class SubtypeQueryBuilder extends Builder
      */
     public function whereIn($column, $values, $boolean = 'and', $not = false): self
     {
+        /** @phpstan-ignore-next-line function.alreadyNarrowedType */
         if (is_string($column)) {
             $this->addSubtypeJoinIfNeeded($column);
         }
 
+        /** @phpstan-ignore-next-line */
         return parent::whereIn($column, $values, $boolean, $not);
     }
 
@@ -102,18 +107,20 @@ class SubtypeQueryBuilder extends Builder
      */
     public function whereNotIn($column, $values, $boolean = 'and'): self
     {
+        /** @phpstan-ignore-next-line function.alreadyNarrowedType */
         if (is_string($column)) {
             $this->addSubtypeJoinIfNeeded($column);
         }
 
+        /** @phpstan-ignore-next-line */
         return parent::whereNotIn($column, $values, $boolean);
     }
 
     /**
      * Add a "where between" clause to the query, handling subtype columns.
      *
-     * @param string|\Illuminate\Database\Query\Expression $column
-     * @param iterable $values
+     * @param \Illuminate\Database\Query\Expression<float|int|string>|string $column
+     * @param iterable<mixed> $values
      * @param string $boolean
      * @param bool $not
      * @return $this
@@ -124,13 +131,14 @@ class SubtypeQueryBuilder extends Builder
             $this->addSubtypeJoinIfNeeded($column);
         }
 
+        /** @phpstan-ignore-next-line */
         return parent::whereBetween($column, $values, $boolean, $not);
     }
 
     /**
      * Add an "order by" clause to the query, handling subtype columns.
      *
-     * @param string|\Closure|\Illuminate\Database\Query\Builder|\Illuminate\Database\Query\Expression $column
+     * @param \Closure|\Illuminate\Database\Query\Builder|\Illuminate\Database\Query\Expression<float|int|string>|string $column
      * @param string $direction
      * @return $this
      */
@@ -140,13 +148,14 @@ class SubtypeQueryBuilder extends Builder
             $this->addSubtypeJoinIfNeeded($column);
         }
 
+        /** @phpstan-ignore-next-line */
         return parent::orderBy($column, $direction);
     }
 
     /**
      * Add a "group by" clause to the query, handling subtype columns.
      *
-     * @param array|string ...$groups
+     * @param array<mixed>|string ...$groups
      * @return $this
      */
     public function groupBy(...$groups): self
@@ -157,6 +166,7 @@ class SubtypeQueryBuilder extends Builder
             }
         }
 
+        /** @phpstan-ignore-next-line */
         return parent::groupBy(...$groups);
     }
 
@@ -171,10 +181,12 @@ class SubtypeQueryBuilder extends Builder
      */
     public function having($column, $operator = null, $value = null, $boolean = 'and'): self
     {
+        /** @phpstan-ignore-next-line function.alreadyNarrowedType */
         if (is_string($column)) {
             $this->addSubtypeJoinIfNeeded($column);
         }
 
+        /** @phpstan-ignore-next-line */
         return parent::having($column, $operator, $value, $boolean);
     }
 
@@ -194,6 +206,7 @@ class SubtypeQueryBuilder extends Builder
             }
         }
 
+        /** @phpstan-ignore-next-line */
         return parent::select($columns);
     }
 
@@ -201,7 +214,7 @@ class SubtypeQueryBuilder extends Builder
      * Execute an aggregate function on the database, handling subtype columns.
      *
      * @param string $function The aggregate function to execute (count, sum, avg, etc.)
-     * @param array|string $columns The columns to aggregate
+     * @param array<int, string>|string $columns The columns to aggregate
      * @return mixed The result of the aggregate function
      */
     public function aggregate($function, $columns = ['*']): mixed
@@ -209,6 +222,7 @@ class SubtypeQueryBuilder extends Builder
         $columns = is_array($columns) ? $columns : [$columns];
 
         foreach ($columns as $column) {
+            /** @phpstan-ignore-next-line function.alreadyNarrowedType */
             if (is_string($column)) {
                 $this->addSubtypeJoinIfNeeded($column);
             }

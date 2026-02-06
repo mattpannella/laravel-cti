@@ -19,7 +19,7 @@ use Pannella\Cti\Traits\BootsSubtypeModel;
  * separate tables.
  *
  * @property string $subtypeTable Name of the table containing subtype-specific data
- * @property array $subtypeAttributes List of attributes that belong to the subtype table
+ * @property array<int, string> $subtypeAttributes List of attributes that belong to the subtype table
  * @property string|null $subtypeKeyName Foreign key column name in subtype table
  *
  */
@@ -33,34 +33,37 @@ abstract class SubtypeModel extends Model
     public const EVENT_SUBTYPE_DELETING = 'subtypeDeleting';
     public const EVENT_SUBTYPE_DELETED = 'subtypeDeleted';
 
-    //name of the subtype table (e.g. assessment_quiz)
+    /**
+     * @var string|null
+     */
     protected $subtypeTable;
 
-    //attributes that belong to the subtype table
+    /**
+     * @var array<int, string>
+     */
     protected $subtypeAttributes = [];
 
-    //optionally override if subtype PK column name differs from parent PK
+    /**
+     * @var string|null
+     */
     protected $subtypeKeyName;
 
-    //required to be able to create new records in the supertype table
+    /**
+     * @var class-string|null
+     */
     protected $ctiParentClass;
 
     /**
      * The event map for the model.
      *
-     * @var array
+     * @var array<string, class-string>
      */
-    protected $dispatchesEvents = [
-        'subtypeSaving' => null,
-        'subtypeSaved' => null,
-        'subtypeDeleting' => null,
-        'subtypeDeleted' => null,
-    ];
+    protected $dispatchesEvents = [];
 
     /**
      * Save both parent and subtype data inside a database transaction.
      *
-     * @param array $options Save options passed to parent save method
+     * @param array<string, mixed> $options Save options passed to parent save method
      * @return bool Whether the save was successful
      * @throws SubtypeException When saving subtype data fails
      */
@@ -165,13 +168,9 @@ abstract class SubtypeModel extends Model
 
             //check if a record already exists for this model in the subtype table
             if ($this->getConnection()->table($this->subtypeTable)->where($keyName, $key)->exists()) {
-                $updated = $this->getConnection()->table($this->subtypeTable)
+                $this->getConnection()->table($this->subtypeTable)
                     ->where($keyName, $key)
                     ->update($data);
-
-                if ($updated === false) {
-                    throw SubtypeException::saveFailed($this->subtypeTable);
-                }
             } else {
                 //insert a new record
                 //merge the primary key into the data array to maintain the relationship
@@ -210,13 +209,9 @@ abstract class SubtypeModel extends Model
                     throw SubtypeException::missingTypeId(static::class);
                 }
 
-                $deleted = $this->getConnection()->table($this->subtypeTable)
+                $this->getConnection()->table($this->subtypeTable)
                     ->where($keyName, $this->getKey())
                     ->delete();
-
-                if ($deleted === false) {
-                    throw new SubtypeException("Failed to delete subtype data from {$this->subtypeTable}");
-                }
 
                 $this->fireModelEvent('subtypeDeleted');
             }
@@ -270,17 +265,18 @@ abstract class SubtypeModel extends Model
      * Create a new Eloquent query builder for the model.
      *
      * @param \Illuminate\Database\Query\Builder $query
-     * @return \Pannella\Cti\SubtypeQueryBuilder
+     * @return \Pannella\Cti\SubtypeQueryBuilder<static>
      */
     public function newEloquentBuilder($query): SubtypeQueryBuilder
     {
+        /** @var SubtypeQueryBuilder<static> */
         return new SubtypeQueryBuilder($query);
     }
 
     /**
      * Get the list of attributes that belong to the subtype table.
      *
-     * @return array
+     * @return array<int, string>
      */
     public function getSubtypeAttributes(): array
     {
@@ -328,7 +324,7 @@ abstract class SubtypeModel extends Model
     /**
      * Create a new instance of the given model.
      *
-     * @param array $attributes
+     * @param array<string, mixed> $attributes
      * @param bool $exists
      * @return static
      */
@@ -348,11 +344,12 @@ abstract class SubtypeModel extends Model
     /**
      * Create a new collection instance with subtype support.
      *
-     * @param array $models Array of models to include in collection
-     * @return \Pannella\Cti\Support\SubtypedCollection
+     * @param array<int, \Illuminate\Database\Eloquent\Model> $models Array of models to include in collection
+     * @return \Pannella\Cti\Support\SubtypedCollection<int, static>
      */
-    public function newCollection(array $models = []): SubtypedCollection
+    public function newCollection(array $models = [])
     {
+        /** @var SubtypedCollection<int, static> */
         return new SubtypedCollection($models);
     }
 
@@ -360,12 +357,12 @@ abstract class SubtypeModel extends Model
      * Create a new instance of the model being queried.
      * Overridden to ensure subtype configuration is preserved.
      *
-     * @param array $attributes
+     * @param array<string, mixed> $attributes
      * @return static
      */
     public function newModelInstance($attributes = [])
     {
-        $model = parent::newModelInstance($attributes);
+        $model = parent::newInstance($attributes);
 
         //if we're copying an existing model's data, load its subtype data
         if (!empty($attributes) && isset($attributes[$this->getKeyName()])) {
@@ -378,7 +375,7 @@ abstract class SubtypeModel extends Model
     /**
      * Create a copy of the model.
      *
-     * @param array|null $except
+     * @param array<int, string>|null $except
      * @return static
      */
     public function replicate(?array $except = [])
@@ -473,7 +470,7 @@ abstract class SubtypeModel extends Model
     /**
      * Get parent attributes excluding subtype attributes.
      *
-     * @return array
+     * @return array<string, mixed>
      */
     protected function getParentAttributes(): array
     {

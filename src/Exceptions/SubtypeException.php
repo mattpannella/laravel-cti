@@ -13,43 +13,43 @@ class SubtypeException extends CtiException
     /**
      * Create an exception for missing subtype table definition.
      *
-     * @return static
+     * @return self
      */
     public static function missingTable(): self
     {
-        return new static('Subtype table must be defined.');
+        return new self('Subtype table must be defined.');
     }
 
     /**
      * Create an exception for missing type ID.
      *
      * @param string $model The model class name
-     * @return static
+     * @return self
      */
     public static function missingTypeId(string $model): self
     {
-        return new static("Missing type ID for model {$model}");
+        return new self("Missing type ID for model {$model}");
     }
 
     /**
      * Create an exception for invalid subtype label.
      *
      * @param string $label The invalid label
-     * @return static
+     * @return self
      */
     public static function invalidSubtype(string $label): self
     {
-        return new static("Invalid subtype label: {$label}");
+        return new self("Invalid subtype label: {$label}");
     }
 
     /**
      * Create an exception for missing lookup table configuration.
      *
-     * @return static
+     * @return self
      */
     public static function missingLookupTable(): self
     {
-        return new static('Subtypes require a defined lookup table.');
+        return new self('Subtypes require a defined lookup table.');
     }
 
     /**
@@ -57,11 +57,11 @@ class SubtypeException extends CtiException
      *
      * @param string $class The model class name
      * @param string $property The missing property name
-     * @return static
+     * @return self
      */
     public static function missingConfiguration(string $class, string $property): self
     {
-        return new static("Missing CTI configuration property \${$property} on {$class}.");
+        return new self("Missing CTI configuration property \${$property} on {$class}.");
     }
 
     /**
@@ -69,21 +69,21 @@ class SubtypeException extends CtiException
      *
      * @param string $label The subtype label that could not be resolved
      * @param string $table The lookup table that was queried
-     * @return static
+     * @return self
      */
     public static function typeResolutionFailed(string $label, string $table): self
     {
-        return new static("Could not resolve type ID for label '{$label}' in table '{$table}'.");
+        return new self("Could not resolve type ID for label '{$label}' in table '{$table}'.");
     }
 
     /**
      * Create an exception for failed save operation.
      *
      * @param string $table The table where the save failed
-     * @return static
+     * @return self
      */
     public static function saveFailed(string $table): self
     {
-        return new static("Failed to save subtype data to table: {$table}");
+        return new self("Failed to save subtype data to table: {$table}");
     }
 }

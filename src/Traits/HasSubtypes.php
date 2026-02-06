@@ -14,7 +14,7 @@ use Pannella\Cti\Support\SubtypedCollection;
  * several static properties to configure the subtype resolution.
  *
  * Required static properties:
- * @property-read array $subtypeMap Mapping of type labels to subtype class names
+ * @property-read array<string, class-string> $subtypeMap Mapping of type labels to subtype class names
  * @property-read string $subtypeKey Column name containing the type identifier
  * @property-read string $subtypeLookupTable Table name containing type definitions
  * @property-read string $subtypeLookupKey Primary key column in lookup table
