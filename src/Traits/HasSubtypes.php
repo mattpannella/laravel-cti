@@ -92,7 +92,7 @@ trait HasSubtypes
                 ->where(static::$subtypeLookupKey, $typeId)
                 ->first();
 
-            $label = $type->{static::$subtypeLookupLabel} ?? null;
+            $label = $type?->{static::$subtypeLookupLabel};
 
             if (!$label) {
                 throw SubtypeException::invalidSubtype((string) $typeId);

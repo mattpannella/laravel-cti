@@ -15,7 +15,8 @@ class Quiz extends SubtypeModel
     protected $subtypeAttributes = [
         'passing_score',
         'time_limit',
-        'show_correct_answers'
+        'show_correct_answers',
+        'category_id',
     ];
 
     protected $attributes = [
@@ -29,7 +30,8 @@ class Quiz extends SubtypeModel
         'enabled',
         'passing_score',
         'time_limit',
-        'show_correct_answers'
+        'show_correct_answers',
+        'category_id',
     ];
 
     /**
@@ -46,5 +48,29 @@ class Quiz extends SubtypeModel
     public function attempts()
     {
         return $this->subtypeHasMany(QuizAttempt::class);
+    }
+
+    /**
+     * Quiz has one settings record (using subtype relationship).
+     */
+    public function settings()
+    {
+        return $this->subtypeHasOne(QuizSettings::class);
+    }
+
+    /**
+     * Quiz belongs to a category (using subtype relationship).
+     */
+    public function category()
+    {
+        return $this->subtypeBelongsTo(QuizCategory::class, 'category_id');
+    }
+
+    /**
+     * Quiz belongs to many students (using subtype relationship).
+     */
+    public function students()
+    {
+        return $this->subtypeBelongsToMany(Student::class, 'quiz_student', 'assessment_id', 'student_id');
     }
 }

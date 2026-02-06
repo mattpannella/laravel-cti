@@ -88,7 +88,7 @@ class SubtypedCollection extends Collection
             $keys = array_filter(array_map(
                 fn (SubtypeModel $m) => $m->getAttribute($primaryKeyName),
                 $models
-            ));
+            ), fn ($k) => $k !== null);
 
             if (empty($keys)) {
                 continue;
