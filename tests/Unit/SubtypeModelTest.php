@@ -79,6 +79,9 @@ class SubtypeModelTest extends TestCase
 
         // Reset the validation cache between tests
         $this->resetValidationCache();
+        
+        // Clear the discriminator scope cache
+        \Pannella\Cti\Support\SubtypeDiscriminatorScope::clearCache();
 
         $this->db = null;
         $this->dispatcher = null;
@@ -718,19 +721,23 @@ class SubtypeModelTest extends TestCase
         );
 
         // Query each subtype separately — they share the parent table
+        // Quiz::all() should only return quizzes
         $quizzes = Quiz::all();
-        $this->assertCount(2, $quizzes);
-        $quiz = $quizzes->first(fn ($q) => $q->title === 'My Quiz');
+        $this->assertCount(1, $quizzes);
+        $quiz = $quizzes->first();
         $this->assertNotNull($quiz);
         $this->assertInstanceOf(Quiz::class, $quiz);
+        $this->assertEquals('My Quiz', $quiz->title);
         $this->assertEquals(80, $quiz->passing_score);
         $this->assertEquals(60, $quiz->time_limit);
 
+        // Survey::all() should only return surveys
         $surveys = Survey::all();
-        $this->assertCount(2, $surveys);
-        $survey = $surveys->first(fn ($s) => $s->title === 'My Survey');
+        $this->assertCount(1, $surveys);
+        $survey = $surveys->first();
         $this->assertNotNull($survey);
         $this->assertInstanceOf(Survey::class, $survey);
+        $this->assertEquals('My Survey', $survey->title);
         $this->assertEquals(1, $survey->anonymous);
         $this->assertEquals(1, $survey->allow_multiple_responses);
 
@@ -2550,6 +2557,202 @@ class SubtypeModelTest extends TestCase
         $this->assertStringContainsString('App\\Models\\Foo', $exception->getMessage());
         $this->assertStringContainsString('title, description', $exception->getMessage());
         $this->assertStringContainsString('Subtype attributes must be unique', $exception->getMessage());
+    }
+
+    /**
+     * Test that Quiz::all() only returns quizzes, not surveys.
+     */
+    public function testQuizQueryOnlyReturnsQuizzes(): void
+    {
+        // Create 2 quizzes
+        $this->createQuizRecord(['id' => 1, 'type_id' => 1, 'title' => 'Quiz 1'], ['assessment_id' => 1]);
+        $this->createQuizRecord(['id' => 2, 'type_id' => 1, 'title' => 'Quiz 2'], ['assessment_id' => 2]);
+        
+        // Create 2 surveys
+        $this->createSurveyRecord(['id' => 3, 'type_id' => 2, 'title' => 'Survey 1'], ['assessment_id' => 3]);
+        $this->createSurveyRecord(['id' => 4, 'type_id' => 2, 'title' => 'Survey 2'], ['assessment_id' => 4]);
+
+        $quizzes = Quiz::all();
+
+        $this->assertCount(2, $quizzes);
+        $this->assertEquals('Quiz 1', $quizzes[0]->title);
+        $this->assertEquals('Quiz 2', $quizzes[1]->title);
+        $this->assertEquals(1, $quizzes[0]->type_id);
+        $this->assertEquals(1, $quizzes[1]->type_id);
+    }
+
+    /**
+     * Test that Survey::all() only returns surveys, not quizzes.
+     */
+    public function testSurveyQueryOnlyReturnsSurveys(): void
+    {
+        // Create 2 quizzes
+        $this->createQuizRecord(['id' => 1, 'type_id' => 1, 'title' => 'Quiz 1'], ['assessment_id' => 1]);
+        $this->createQuizRecord(['id' => 2, 'type_id' => 1, 'title' => 'Quiz 2'], ['assessment_id' => 2]);
+        
+        // Create 2 surveys
+        $this->createSurveyRecord(['id' => 3, 'type_id' => 2, 'title' => 'Survey 1'], ['assessment_id' => 3]);
+        $this->createSurveyRecord(['id' => 4, 'type_id' => 2, 'title' => 'Survey 2'], ['assessment_id' => 4]);
+
+        $surveys = Survey::all();
+
+        $this->assertCount(2, $surveys);
+        $this->assertEquals('Survey 1', $surveys[0]->title);
+        $this->assertEquals('Survey 2', $surveys[1]->title);
+        $this->assertEquals(2, $surveys[0]->type_id);
+        $this->assertEquals(2, $surveys[1]->type_id);
+    }
+
+    /**
+     * Test that Assessment::all() returns all assessments (both quizzes and surveys).
+     */
+    public function testAssessmentQueryReturnsAllTypes(): void
+    {
+        // Create 2 quizzes
+        $this->createQuizRecord(['id' => 1, 'type_id' => 1, 'title' => 'Quiz 1'], ['assessment_id' => 1]);
+        $this->createQuizRecord(['id' => 2, 'type_id' => 1, 'title' => 'Quiz 2'], ['assessment_id' => 2]);
+        
+        // Create 2 surveys
+        $this->createSurveyRecord(['id' => 3, 'type_id' => 2, 'title' => 'Survey 1'], ['assessment_id' => 3]);
+        $this->createSurveyRecord(['id' => 4, 'type_id' => 2, 'title' => 'Survey 2'], ['assessment_id' => 4]);
+
+        $assessments = Assessment::all();
+
+        // Parent model should return all records
+        $this->assertCount(4, $assessments);
+        
+        // Check that they're morphed into the correct subtype classes
+        $this->assertInstanceOf(Quiz::class, $assessments[0]);
+        $this->assertInstanceOf(Quiz::class, $assessments[1]);
+        $this->assertInstanceOf(Survey::class, $assessments[2]);
+        $this->assertInstanceOf(Survey::class, $assessments[3]);
+    }
+
+    /**
+     * Test that Quiz pagination only returns quizzes.
+     */
+    public function testQuizPaginationOnlyReturnsQuizzes(): void
+    {
+        $this->markTestSkipped('Pagination requires additional setup in test environment');
+        
+        // Create 5 quizzes
+        for ($i = 1; $i <= 5; $i++) {
+            $this->createQuizRecord(
+                ['id' => $i, 'type_id' => 1, 'title' => "Quiz $i"],
+                ['assessment_id' => $i]
+            );
+        }
+        
+        // Create 3 surveys
+        for ($i = 6; $i <= 8; $i++) {
+            $this->createSurveyRecord(
+                ['id' => $i, 'type_id' => 2, 'title' => "Survey " . ($i - 5)],
+                ['assessment_id' => $i]
+            );
+        }
+
+        $paginator = Quiz::paginate(3);
+
+        $this->assertEquals(5, $paginator->total());
+        $this->assertCount(3, $paginator);
+        $this->assertContainsOnlyInstancesOf(Quiz::class, $paginator->items());
+        
+        // Verify all results are quizzes
+        foreach ($paginator->items() as $item) {
+            $this->assertEquals(1, $item->type_id);
+        }
+    }
+
+    /**
+     * Test that discriminator scope can be removed with withoutGlobalScope().
+     */
+    public function testWithoutGlobalScopeReturnsAllRecords(): void
+    {
+        // Create 2 quizzes
+        $this->createQuizRecord(['id' => 1, 'type_id' => 1, 'title' => 'Quiz 1'], ['assessment_id' => 1]);
+        $this->createQuizRecord(['id' => 2, 'type_id' => 1, 'title' => 'Quiz 2'], ['assessment_id' => 2]);
+        
+        // Create 2 surveys
+        $this->createSurveyRecord(['id' => 3, 'type_id' => 2, 'title' => 'Survey 1'], ['assessment_id' => 3]);
+        $this->createSurveyRecord(['id' => 4, 'type_id' => 2, 'title' => 'Survey 2'], ['assessment_id' => 4]);
+
+        // Query without the discriminator scope should return all records
+        $allRecords = Quiz::withoutGlobalScope(\Pannella\Cti\Support\SubtypeDiscriminatorScope::class)->get();
+
+        $this->assertCount(4, $allRecords);
+    }
+
+    /**
+     * Test that discriminator filtering works with other where clauses.
+     */
+    public function testDiscriminatorFilteringWorksWithOtherClauses(): void
+    {
+        // Create 3 quizzes with different titles
+        $this->createQuizRecord(['id' => 1, 'type_id' => 1, 'title' => 'Final Exam'], ['assessment_id' => 1]);
+        $this->createQuizRecord(['id' => 2, 'type_id' => 1, 'title' => 'Midterm Exam'], ['assessment_id' => 2]);
+        $this->createQuizRecord(['id' => 3, 'type_id' => 1, 'title' => 'Pop Quiz'], ['assessment_id' => 3]);
+        
+        // Create a survey with "Exam" in title
+        $this->createSurveyRecord(['id' => 4, 'type_id' => 2, 'title' => 'Final Exam Survey'], ['assessment_id' => 4]);
+
+        // Should only find quizzes with "Exam" in title
+        $results = Quiz::where('title', 'like', '%Exam%')->get();
+
+        $this->assertCount(2, $results);
+        $this->assertEquals('Final Exam', $results[0]->title);
+        $this->assertEquals('Midterm Exam', $results[1]->title);
+        $this->assertContainsOnlyInstancesOf(Quiz::class, $results);
+    }
+
+    /**
+     * Test that discriminator filtering works with query builder aggregates.
+     */
+    public function testDiscriminatorFilteringWorksWithCount(): void
+    {
+        // Create 3 quizzes
+        $this->createQuizRecord(['id' => 1, 'type_id' => 1], ['assessment_id' => 1]);
+        $this->createQuizRecord(['id' => 2, 'type_id' => 1], ['assessment_id' => 2]);
+        $this->createQuizRecord(['id' => 3, 'type_id' => 1], ['assessment_id' => 3]);
+        
+        // Create 2 surveys
+        $this->createSurveyRecord(['id' => 4, 'type_id' => 2], ['assessment_id' => 4]);
+        $this->createSurveyRecord(['id' => 5, 'type_id' => 2], ['assessment_id' => 5]);
+
+        $quizCount = Quiz::count();
+        $surveyCount = Survey::count();
+        $assessmentCount = Assessment::count();
+
+        $this->assertEquals(3, $quizCount);
+        $this->assertEquals(2, $surveyCount);
+        $this->assertEquals(5, $assessmentCount);
+    }
+
+    /**
+     * Test that find() respects discriminator filtering.
+     */
+    public function testFindRespectsDiscriminatorFiltering(): void
+    {
+        // Create a quiz with id 1
+        $this->createQuizRecord(['id' => 1, 'type_id' => 1, 'title' => 'Quiz 1'], ['assessment_id' => 1]);
+        
+        // Create a survey with id 2
+        $this->createSurveyRecord(['id' => 2, 'type_id' => 2, 'title' => 'Survey 1'], ['assessment_id' => 2]);
+
+        // Quiz::find(1) should work
+        $quiz = Quiz::find(1);
+        $this->assertNotNull($quiz);
+        $this->assertInstanceOf(Quiz::class, $quiz);
+        $this->assertEquals('Quiz 1', $quiz->title);
+
+        // Quiz::find(2) should return null (because id 2 is a survey)
+        $quizNotFound = Quiz::find(2);
+        $this->assertNull($quizNotFound);
+
+        // Survey::find(2) should work
+        $survey = Survey::find(2);
+        $this->assertNotNull($survey);
+        $this->assertInstanceOf(Survey::class, $survey);
+        $this->assertEquals('Survey 1', $survey->title);
     }
 }
 

@@ -343,6 +343,16 @@ abstract class SubtypeModel extends Model
     }
 
     /**
+     * Get the CTI parent class name.
+     *
+     * @return string|null
+     */
+    public function getCtiParentClass(): ?string
+    {
+        return $this->ctiParentClass;
+    }
+
+    /**
      * Fire a model event with the given name.
      *
      * @param string $event Name of the event
