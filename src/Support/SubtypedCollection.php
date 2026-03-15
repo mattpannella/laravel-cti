@@ -54,20 +54,7 @@ class SubtypedCollection extends Collection
                 && $model->getSubtypeTable()
                 && $model->getKey()
             ) {
-                // Check if subtype data is already loaded
-                // If any subtype attribute is set, assume data is already loaded
-                $subtypeAttrs = $model->getSubtypeAttributes();
-                $alreadyLoaded = false;
-                if (!empty($subtypeAttrs)) {
-                    foreach ($subtypeAttrs as $attr) {
-                        if ($model->getAttribute($attr) !== null) {
-                            $alreadyLoaded = true;
-                            break;
-                        }
-                    }
-                }
-                
-                if (!$alreadyLoaded) {
+                if (!$model->isSubtypeDataLoaded()) {
                     $grouped[get_class($model)][] = $model;
                 }
             }
@@ -109,6 +96,8 @@ class SubtypedCollection extends Collection
                     $model->forceFill((array) $extra);
                     $model->syncOriginal();
                 }
+                // Mark subtype data as loaded regardless of whether data existed
+                $model->setSubtypeDataLoaded(true);
             }
         }
 

@@ -50,8 +50,8 @@ class SubtypeQueryBuilder extends Builder
             return;
         }
 
-        // Add join
-        $this->join(
+        // Add left join to avoid dropping parent records missing subtype data
+        $this->leftJoin(
             $subtypeTable,
             $model->getTable() . '.' . $model->getKeyName(),
             '=',

@@ -83,6 +83,10 @@ class SubtypeModelTest extends TestCase
         // Clear the discriminator scope cache
         \Pannella\Cti\Support\SubtypeDiscriminatorScope::clearCache();
 
+        // Clear the creating type ID cache
+        Quiz::clearTypeIdCache();
+        Survey::clearTypeIdCache();
+
         $this->db = null;
         $this->dispatcher = null;
 
@@ -2753,6 +2757,320 @@ class SubtypeModelTest extends TestCase
         $this->assertNotNull($survey);
         $this->assertInstanceOf(Survey::class, $survey);
         $this->assertEquals('Survey 1', $survey->title);
+    }
+
+    // ============================================================
+    // Phase 4: Bug Fix & Improvement Tests
+    // ============================================================
+
+    /**
+     * Test that delete() is wrapped in a transaction — subtype row is preserved
+     * if parent delete fails.
+     */
+    public function testDeleteTransactionRollback(): void
+    {
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'Transaction Test', 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 80]
+        );
+
+        $quiz = Quiz::find(1);
+
+        // Register a deleting event on the parent model that throws
+        Quiz::deleting(function ($model) {
+            throw new \RuntimeException('Simulated parent delete failure');
+        });
+
+        try {
+            $quiz->delete();
+            $this->fail('Expected exception was not thrown');
+        } catch (\Exception $e) {
+            // Expected
+        }
+
+        // Both parent and subtype records should still exist due to transaction rollback
+        $this->assertNotNull(DB::table('assessment')->where('id', 1)->first(), 'Parent record should still exist');
+        $this->assertNotNull(DB::table('assessment_quiz')->where('assessment_id', 1)->first(), 'Subtype record should still exist after rollback');
+    }
+
+    /**
+     * Test that subtypeDeleted fires AFTER parent::delete(), not before.
+     */
+    public function testSubtypeDeletedEventFiresAfterParentDelete(): void
+    {
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'Event Order Test', 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 80]
+        );
+
+        $parentExistsAtEventTime = null;
+
+        Quiz::subtypeDeleted(function ($quiz) use (&$parentExistsAtEventTime) {
+            // At this point, parent::delete() should have already been called
+            $parentExistsAtEventTime = DB::table('assessment')->where('id', $quiz->id)->exists();
+        });
+
+        $quiz = Quiz::find(1);
+        $quiz->delete();
+
+        // subtypeDeleted should fire after parent delete, so parent row should be gone
+        $this->assertNotNull($parentExistsAtEventTime, 'subtypeDeleted event should have fired');
+        $this->assertFalse($parentExistsAtEventTime, 'Parent record should be deleted when subtypeDeleted fires');
+    }
+
+    /**
+     * Test upsert behavior: saving a new record inserts, saving again updates.
+     */
+    public function testUpsertBehaviorForNewAndExistingRecords(): void
+    {
+        // Create new — should insert
+        $quiz = new Quiz();
+        $quiz->title = 'Upsert Test';
+        $quiz->passing_score = 70;
+        $quiz->time_limit = 30;
+        $quiz->save();
+
+        $subtypeRecord = DB::table('assessment_quiz')->where('assessment_id', $quiz->id)->first();
+        $this->assertNotNull($subtypeRecord);
+        $this->assertEquals(70, $subtypeRecord->passing_score);
+
+        // Update — should upsert (update)
+        $quiz->passing_score = 90;
+        $quiz->save();
+
+        $subtypeRecord = DB::table('assessment_quiz')->where('assessment_id', $quiz->id)->first();
+        $this->assertEquals(90, $subtypeRecord->passing_score);
+
+        // Only one record should exist
+        $count = DB::table('assessment_quiz')->where('assessment_id', $quiz->id)->count();
+        $this->assertEquals(1, $count);
+    }
+
+    /**
+     * Test that a misconfigured subtype (null type ID) returns empty results, not all records.
+     */
+    public function testMisconfiguredSubtypeReturnsEmptyResults(): void
+    {
+        // Create records in the parent table
+        $this->createQuizRecord(['id' => 1, 'type_id' => 1, 'title' => 'Quiz 1'], ['assessment_id' => 1]);
+        $this->createSurveyRecord(['id' => 2, 'type_id' => 2, 'title' => 'Survey 1'], ['assessment_id' => 2]);
+
+        // Create an anonymous subtype that can't be resolved (no matching label in subtypeMap)
+        $model = new class extends SubtypeModel {
+            protected $table = 'assessment';
+            protected $subtypeTable = 'assessment_quiz';
+            protected $subtypeAttributes = ['passing_score'];
+            protected $ctiParentClass = Assessment::class;
+
+            // Override to return a class not in the subtypeMap
+            public static function clearBootedModels()
+            {
+                parent::clearBootedModels();
+            }
+        };
+
+        // When discriminator scope resolves null, it should add WHERE 1=0
+        // effectively returning empty results
+        $scope = new \Pannella\Cti\Support\SubtypeDiscriminatorScope();
+        $builder = $model->newQuery();
+
+        // The scope should have been applied via boot, but for anonymous class
+        // we directly test the behavior
+        $scope->apply($builder, $model);
+
+        // With whereRaw('1 = 0'), the query should return no results
+        $results = $builder->get();
+        $this->assertCount(0, $results);
+    }
+
+    /**
+     * Test LEFT JOIN: parent records without subtype data appear in whereNull queries.
+     */
+    public function testLeftJoinOrphanParentAppearsInWhereNull(): void
+    {
+        // Create a quiz with subtype data
+        $this->createQuizRecord(
+            ['id' => 1, 'type_id' => 1, 'title' => 'Complete Quiz'],
+            ['assessment_id' => 1, 'passing_score' => 80, 'time_limit' => 60]
+        );
+
+        // Create a parent-only record (no subtype row)
+        DB::table('assessment')->insert([
+            'id' => 2,
+            'type_id' => 1,
+            'title' => 'Orphan Quiz',
+            'enabled' => true,
+        ]);
+
+        // whereNull on a subtype column should find the orphan via LEFT JOIN
+        $results = Quiz::whereNull('time_limit')->get();
+
+        $this->assertCount(1, $results);
+        $this->assertEquals('Orphan Quiz', $results->first()->title);
+    }
+
+    /**
+     * Test collection with all-null subtype attributes loads correctly.
+     */
+    public function testCollectionWithAllNullSubtypeAttributesLoadsCorrectly(): void
+    {
+        // Create quiz records with all-null subtype values
+        DB::table('assessment')->insert([
+            'id' => 1, 'type_id' => 1, 'title' => 'Null Quiz 1', 'enabled' => true,
+        ]);
+        DB::table('assessment_quiz')->insert([
+            'assessment_id' => 1, 'passing_score' => 0, 'time_limit' => null, 'show_correct_answers' => false, 'category_id' => null,
+        ]);
+
+        DB::table('assessment')->insert([
+            'id' => 2, 'type_id' => 1, 'title' => 'Null Quiz 2', 'enabled' => true,
+        ]);
+        DB::table('assessment_quiz')->insert([
+            'assessment_id' => 2, 'passing_score' => 0, 'time_limit' => null, 'show_correct_answers' => false, 'category_id' => null,
+        ]);
+
+        // With the old attribute-checking approach, these would be treated as "not loaded"
+        // because all values are null/falsy. The new flag-based approach handles this.
+        $quizzes = Quiz::all();
+
+        $this->assertCount(2, $quizzes);
+        // Verify subtype data was loaded (not null from missing data)
+        foreach ($quizzes as $quiz) {
+            $this->assertTrue($quiz->isSubtypeDataLoaded());
+            $this->assertEquals(0, $quiz->passing_score);
+        }
+    }
+
+    /**
+     * Test that save doesn't issue an unnecessary parent SELECT (Phase 2.1).
+     */
+    public function testSaveDoesNotIssueUnnecessaryParentSelect(): void
+    {
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'Query Count Test', 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 80]
+        );
+
+        $quiz = Quiz::find(1);
+        $quiz->passing_score = 90;
+
+        DB::connection()->flushQueryLog();
+        DB::connection()->enableQueryLog();
+
+        $quiz->save();
+
+        $queryLog = DB::connection()->getQueryLog();
+
+        // Should NOT have a SELECT on the parent table to reload data
+        $parentSelects = array_filter($queryLog, fn ($q) =>
+            stripos($q['query'], 'select') !== false
+            && stripos($q['query'], '"assessment"') !== false
+            && stripos($q['query'], 'assessment_quiz') === false
+            && stripos($q['query'], 'assessment_type') === false
+        );
+
+        $this->assertCount(0, $parentSelects, 'Save should not issue a SELECT on the parent table to reload data');
+    }
+
+    /**
+     * Test that multiple creates only query the lookup table once (Phase 2.2).
+     */
+    public function testMultipleCreatesOnlyQueryLookupTableOnce(): void
+    {
+        // First create primes the cache
+        $quiz1 = new Quiz();
+        $quiz1->title = 'Quiz 1';
+        $quiz1->passing_score = 70;
+        $quiz1->save();
+
+        DB::connection()->flushQueryLog();
+        DB::connection()->enableQueryLog();
+
+        // Second create should use the cached type ID
+        $quiz2 = new Quiz();
+        $quiz2->title = 'Quiz 2';
+        $quiz2->passing_score = 80;
+        $quiz2->save();
+
+        $queryLog = DB::connection()->getQueryLog();
+
+        $lookupQueries = array_filter($queryLog, fn ($q) =>
+            stripos($q['query'], 'assessment_type') !== false
+        );
+
+        $this->assertCount(0, $lookupQueries, 'Second create should not query the lookup table (cached)');
+    }
+
+    /**
+     * Test eager loading parent relationships via __call proxy.
+     */
+    public function testEagerLoadingParentRelationshipsViaProxy(): void
+    {
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'Quiz 1', 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 80]
+        );
+        $this->createQuizRecord(
+            ['id' => 2, 'title' => 'Quiz 2', 'type_id' => 1],
+            ['assessment_id' => 2, 'passing_score' => 90]
+        );
+
+        DB::table('assessment_tag')->insert([
+            ['assessment_id' => 1, 'tag_name' => 'math'],
+            ['assessment_id' => 2, 'tag_name' => 'science'],
+        ]);
+
+        // Load quizzes and access parent relationship
+        $quizzes = Quiz::all();
+        foreach ($quizzes as $quiz) {
+            $tags = $quiz->tags()->get();
+            $this->assertCount(1, $tags);
+        }
+    }
+
+    /**
+     * Test cursor/lazy iteration works with subtype models.
+     * Note: cursor() bypasses newCollection(), so subtype data must be loaded
+     * individually via newInstance()/loadSubtypeData().
+     */
+    public function testCursorIterationWithSubtypeModels(): void
+    {
+        $this->createQuizRecord(['id' => 1, 'type_id' => 1, 'title' => 'Quiz 1'], ['assessment_id' => 1, 'passing_score' => 70]);
+        $this->createQuizRecord(['id' => 2, 'type_id' => 1, 'title' => 'Quiz 2'], ['assessment_id' => 2, 'passing_score' => 80]);
+        $this->createQuizRecord(['id' => 3, 'type_id' => 1, 'title' => 'Quiz 3'], ['assessment_id' => 3, 'passing_score' => 90]);
+
+        $count = 0;
+        foreach (Quiz::cursor() as $quiz) {
+            $this->assertInstanceOf(Quiz::class, $quiz);
+            $this->assertNotNull($quiz->title);
+            // Cursor bypasses collection batch-loading, so subtype data
+            // needs explicit loading. This documents the known behavior.
+            $quiz->loadSubtypeData();
+            $this->assertNotNull($quiz->passing_score);
+            $count++;
+        }
+
+        $this->assertEquals(3, $count);
+    }
+
+    /**
+     * Test isSubtypeDataLoaded flag is set correctly.
+     */
+    public function testSubtypeDataLoadedFlag(): void
+    {
+        $quiz = new Quiz();
+        $this->assertFalse($quiz->isSubtypeDataLoaded());
+
+        $quiz->title = 'Flag Test';
+        $quiz->passing_score = 70;
+        $quiz->save();
+
+        // After save which calls loadSubtypeData(), flag should be true
+        $this->assertTrue($quiz->isSubtypeDataLoaded());
+
+        // Loading from DB should also set the flag
+        $loaded = Quiz::find($quiz->id);
+        $this->assertTrue($loaded->isSubtypeDataLoaded());
     }
 }
 
