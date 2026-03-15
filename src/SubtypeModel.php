@@ -225,7 +225,11 @@ abstract class SubtypeModel extends Model
             }
 
             return $this->getConnection()->transaction(function () {
-                if ($this->exists && $this->subtypeTable) {
+                // Only delete subtype row for hard deletes, not soft deletes
+                $isSoftDeleting = method_exists($this, 'trashed')
+                    && !($this->forceDeleting ?? false);
+
+                if ($this->exists && $this->subtypeTable && !$isSoftDeleting) {
                     $keyName = $this->subtypeKeyName ?? $this->getKeyName();
                     if (!$this->getKey()) {
                         throw SubtypeException::missingTypeId(static::class);
