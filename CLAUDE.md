@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Laravel package implementing the Class Table Inheritance (CTI) pattern for Eloquent models. Stores shared attributes in a parent table and subtype-specific attributes in separate tables, maintaining proper database normalization. Supports Laravel 8–12 and PHP 8.0+.
+Laravel package implementing the Class Table Inheritance (CTI) pattern for Eloquent models. Stores shared attributes in a parent table and subtype-specific attributes in separate tables, maintaining proper database normalization. Supports Laravel 8–12 and PHP 8.1+.
 
 ## Commands
 

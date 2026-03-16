@@ -365,9 +365,7 @@ class SubtypeQueryBuilder extends Builder
             $this->addSubtypeJoinIfNeeded($column);
         }
 
-        $this->query->latest($column);
-
-        return $this;
+        return parent::latest($column);
     }
 
     /**
@@ -386,9 +384,7 @@ class SubtypeQueryBuilder extends Builder
             $this->addSubtypeJoinIfNeeded($column);
         }
 
-        $this->query->oldest($column);
-
-        return $this;
+        return parent::oldest($column);
     }
 
     /**
@@ -443,10 +439,11 @@ class SubtypeQueryBuilder extends Builder
         $subtypeValues = array_intersect_key($values, $subtypeAttrs);
         $parentValues = array_diff_key($values, $subtypeAttrs);
 
-        $affected = 0;
+        $parentAffected = 0;
+        $subtypeAffected = 0;
 
         if (!empty($parentValues)) {
-            $affected = parent::update($parentValues);
+            $parentAffected = parent::update($parentValues);
         }
 
         if (!empty($subtypeValues)) {
@@ -462,13 +459,13 @@ class SubtypeQueryBuilder extends Builder
             $ids = $this->pluck($model->getTable() . '.' . $keyName)->all();
 
             if (!empty($ids)) {
-                $affected = $model->getConnection()->table($subtypeTable)
+                $subtypeAffected = $model->getConnection()->table($subtypeTable)
                     ->whereIn($subtypeKeyName, $ids)
                     ->update($subtypeValues);
             }
         }
 
-        return $affected;
+        return max($parentAffected, $subtypeAffected);
     }
 
     /**
@@ -510,13 +507,16 @@ class SubtypeQueryBuilder extends Builder
         $subtypeExtra = array_intersect_key($extra, $subtypeAttrFlip);
         $parentExtra = array_diff_key($extra, $subtypeAttrFlip);
 
+        $parentAffected = 0;
         if (!empty($parentExtra)) {
-            parent::update($parentExtra);
+            $parentAffected = parent::update($parentExtra);
         }
 
-        return $model->getConnection()->table($subtypeTable)
+        $subtypeAffected = $model->getConnection()->table($subtypeTable)
             ->whereIn($subtypeKeyName, $ids)
             ->increment($column, $amount, $subtypeExtra);
+
+        return max($parentAffected, $subtypeAffected);
     }
 
     /**
@@ -558,12 +558,15 @@ class SubtypeQueryBuilder extends Builder
         $subtypeExtra = array_intersect_key($extra, $subtypeAttrFlip);
         $parentExtra = array_diff_key($extra, $subtypeAttrFlip);
 
+        $parentAffected = 0;
         if (!empty($parentExtra)) {
-            parent::update($parentExtra);
+            $parentAffected = parent::update($parentExtra);
         }
 
-        return $model->getConnection()->table($subtypeTable)
+        $subtypeAffected = $model->getConnection()->table($subtypeTable)
             ->whereIn($subtypeKeyName, $ids)
             ->decrement($column, $amount, $subtypeExtra);
+
+        return max($parentAffected, $subtypeAffected);
     }
 }
