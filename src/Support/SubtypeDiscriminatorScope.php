@@ -5,6 +5,8 @@ namespace Pannella\Cti\Support;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Scope;
+use Illuminate\Database\QueryException;
+use Pannella\Cti\Exceptions\SubtypeException;
 use Pannella\Cti\SubtypeModel;
 
 /**
@@ -44,6 +46,7 @@ class SubtypeDiscriminatorScope implements Scope
         $typeId = $this->resolveTypeId($model);
         
         if ($typeId === null) {
+            $builder->whereRaw('1 = 0');
             return;
         }
 
@@ -100,10 +103,14 @@ class SubtypeDiscriminatorScope implements Scope
 
             static::$typeIdCache[$modelClass] = $typeId;
             return $typeId;
-        } catch (\Exception $e) {
-            // If resolution fails, cache null and don't apply scope
+        } catch (QueryException $e) {
+            // Table doesn't exist yet (e.g. during migrations) — cache null
             static::$typeIdCache[$modelClass] = null;
             return null;
+        } catch (SubtypeException $e) {
+            throw $e;
+        } catch (\Exception $e) {
+            throw new SubtypeException("Failed to resolve discriminator type: {$e->getMessage()}", 0, $e);
         }
     }
 

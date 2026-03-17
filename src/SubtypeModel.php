@@ -54,6 +54,13 @@ abstract class SubtypeModel extends Model
     protected $ctiParentClass;
 
     /**
+     * Whether subtype data has been loaded for this model instance.
+     *
+     * @var bool
+     */
+    protected bool $subtypeDataLoaded = false;
+
+    /**
      * Cache of classes that have already passed subtype column validation.
      *
      * @var array<class-string, true>
@@ -136,33 +143,18 @@ abstract class SubtypeModel extends Model
             $saved = parent::save($options);
 
             if ($saved) {
-                //get any changes from parent save
-                $parentSaveChanges = array_diff_key($this->attributes, $originalAttributesArray);
+                //capture all parent attributes after save (includes timestamps, auto-increment ID, etc.)
+                $postSaveParentAttributes = $this->attributes;
 
-                //restore full attribute set
+                //restore full attribute set, with parent save changes taking precedence
                 $this->attributes = array_merge(
                     $originalAttributesArray,
-                    $parentSaveChanges
+                    $postSaveParentAttributes
                 );
 
                 //save subtype data if we have any
                 if (!empty($dirtySubtypeAttributes)) {
                     $this->saveSubtypeData();
-                }
-
-                //reload data to ensure consistency
-                if ($this->ctiParentClass && class_exists($this->ctiParentClass)) {
-                    $parentModel = (new $this->ctiParentClass)->newQuery()
-                        ->where($this->getKeyName(), $this->getKey())
-                        ->first();
-
-                    if ($parentModel) {
-                        foreach ($parentModel->getAttributes() as $key => $value) {
-                            if (!in_array($key, $this->getSubtypeAttributes())) {
-                                $this->setAttribute($key, $value);
-                            }
-                        }
-                    }
                 }
 
                 $this->loadSubtypeData();
@@ -203,21 +195,13 @@ abstract class SubtypeModel extends Model
             // Filter model attributes to only include subtype attributes
             $data = array_intersect_key($this->getAttributes(), array_flip($this->subtypeAttributes));
 
-            //check if a record already exists for this model in the subtype table
-            if ($this->getConnection()->table($this->subtypeTable)->where($keyName, $key)->exists()) {
-                $this->getConnection()->table($this->subtypeTable)
-                    ->where($keyName, $key)
-                    ->update($data);
-            } else {
-                //insert a new record
-                //merge the primary key into the data array to maintain the relationship
-                $inserted = $this->getConnection()->table($this->subtypeTable)
-                    ->insert(array_merge([$keyName => $key], $data));
-
-                if (!$inserted) {
-                    throw SubtypeException::saveFailed($this->subtypeTable);
-                }
-            }
+            // Use upsert to avoid TOCTOU race between exists() and insert()
+            $this->getConnection()->table($this->subtypeTable)
+                ->upsert(
+                    [array_merge([$keyName => $key], $data)],
+                    [$keyName],
+                    array_keys($data)
+                );
         } catch (\Exception $e) {
             if ($e instanceof SubtypeException) {
                 throw $e;
@@ -240,20 +224,30 @@ abstract class SubtypeModel extends Model
                 return false;
             }
 
-            if ($this->exists && $this->subtypeTable) {
-                $keyName = $this->subtypeKeyName ?? $this->getKeyName();
-                if (!$this->getKey()) {
-                    throw SubtypeException::missingTypeId(static::class);
+            return $this->getConnection()->transaction(function () {
+                // Only delete subtype row for hard deletes, not soft deletes
+                $isSoftDeleting = method_exists($this, 'trashed')
+                    && !($this->forceDeleting ?? false);
+
+                if ($this->exists && $this->subtypeTable && !$isSoftDeleting) {
+                    $keyName = $this->subtypeKeyName ?? $this->getKeyName();
+                    if (!$this->getKey()) {
+                        throw SubtypeException::missingTypeId(static::class);
+                    }
+
+                    $this->getConnection()->table($this->subtypeTable)
+                        ->where($keyName, $this->getKey())
+                        ->delete();
                 }
 
-                $this->getConnection()->table($this->subtypeTable)
-                    ->where($keyName, $this->getKey())
-                    ->delete();
+                $result = parent::delete();
 
-                $this->fireModelEvent('subtypeDeleted');
-            }
+                if ($result) {
+                    $this->fireModelEvent('subtypeDeleted');
+                }
 
-            return parent::delete();
+                return $result;
+            });
         } catch (\Exception $e) {
             if ($e instanceof SubtypeException) {
                 throw $e;
@@ -292,6 +286,8 @@ abstract class SubtypeModel extends Model
                 $this->forceFill((array) $data);
                 $this->exists = true;
             }
+
+            $this->subtypeDataLoaded = true;
         } catch (\Exception $e) {
             if ($e instanceof SubtypeException) {
                 throw $e;
@@ -304,11 +300,10 @@ abstract class SubtypeModel extends Model
      * Create a new Eloquent query builder for the model.
      *
      * @param \Illuminate\Database\Query\Builder $query
-     * @return \Pannella\Cti\SubtypeQueryBuilder<static>
+     * @return \Pannella\Cti\SubtypeQueryBuilder
      */
     public function newEloquentBuilder($query): SubtypeQueryBuilder
     {
-        /** @var SubtypeQueryBuilder<static> */
         return new SubtypeQueryBuilder($query);
     }
 
@@ -320,6 +315,27 @@ abstract class SubtypeModel extends Model
     public function getSubtypeAttributes(): array
     {
         return $this->subtypeAttributes;
+    }
+
+    /**
+     * Check if subtype data has been loaded for this instance.
+     *
+     * @return bool
+     */
+    public function isSubtypeDataLoaded(): bool
+    {
+        return $this->subtypeDataLoaded;
+    }
+
+    /**
+     * Set the subtype data loaded flag.
+     *
+     * @param bool $loaded
+     * @return void
+     */
+    public function setSubtypeDataLoaded(bool $loaded): void
+    {
+        $this->subtypeDataLoaded = $loaded;
     }
 
     /**
@@ -382,8 +398,8 @@ abstract class SubtypeModel extends Model
         //get the normal new instance
         $instance = parent::newInstance($attributes, $exists);
 
-        //if this is an existing record, load its subtype data
-        if ($exists && $instance->getKey()) {
+        //if this is an existing record and subtype data hasn't been batch-loaded, load it
+        if ($exists && $instance->getKey() && !$instance->isSubtypeDataLoaded()) {
             $instance->loadSubtypeData();
         }
 

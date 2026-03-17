@@ -9,6 +9,13 @@ use Pannella\Cti\Support\SubtypeDiscriminatorScope;
 trait BootsSubtypeModel
 {
     /**
+     * Cache of resolved type IDs per model class for the creating event.
+     *
+     * @var array<class-string, int|string>
+     */
+    protected static array $creatingTypeIdCache = [];
+
+    /**
      * The "booting" method of the model.
      *
      * @return void
@@ -35,6 +42,12 @@ trait BootsSubtypeModel
                 $ctiParentClass = new $ctiParentClass();
                 $discriminatorColumn = $ctiParentClass->getSubtypeKey();
                 if (empty($model->getAttribute($discriminatorColumn))) {
+                    // Use cached type ID if available
+                    if (isset(static::$creatingTypeIdCache[$modelClass])) {
+                        $model->setAttribute($discriminatorColumn, static::$creatingTypeIdCache[$modelClass]);
+                        return;
+                    }
+
                     $subtypeMap = $ctiParentClass->getSubtypeMap();
                     $label = array_search($modelClass, $subtypeMap, true);
 
@@ -48,6 +61,7 @@ trait BootsSubtypeModel
                             ->value($lookupKeyCol);
 
                         if ($typeId !== null) {
+                            static::$creatingTypeIdCache[$modelClass] = $typeId;
                             $model->setAttribute($discriminatorColumn, $typeId);
                         } else {
                             throw SubtypeException::typeResolutionFailed($label, $lookupTable);
@@ -58,5 +72,16 @@ trait BootsSubtypeModel
                 throw $e;
             }
         });
+    }
+
+    /**
+     * Clear the creating type ID cache.
+     * Useful for testing or when type definitions change at runtime.
+     *
+     * @return void
+     */
+    public static function clearTypeIdCache(): void
+    {
+        static::$creatingTypeIdCache = [];
     }
 }
