@@ -22,7 +22,7 @@ trait HasSubtypeRelations
      * @param class-string<TRelatedModel> $related Related model class name
      * @param string|null $foreignKey Foreign key column on related table
      * @param string|null $localKey Local key column on subtype table
-     * @return HasOne<TRelatedModel, $this>
+     * @return HasOne
      */
     protected function subtypeHasOne(string $related, ?string $foreignKey = null, ?string $localKey = null): HasOne
     {
@@ -43,7 +43,7 @@ trait HasSubtypeRelations
      * @param class-string<TRelatedModel> $related Related model class name
      * @param string|null $foreignKey Foreign key column on related table
      * @param string|null $localKey Local key column on subtype table
-     * @return HasMany<TRelatedModel, $this>
+     * @return HasMany
      */
     protected function subtypeHasMany(string $related, ?string $foreignKey = null, ?string $localKey = null): HasMany
     {
@@ -64,7 +64,7 @@ trait HasSubtypeRelations
      * @param class-string<TRelatedModel> $related Related model class name
      * @param string|null $foreignKey Foreign key column on subtype table
      * @param string|null $ownerKey Owner key column on related table
-     * @return BelongsTo<TRelatedModel, $this>
+     * @return BelongsTo
      */
     protected function subtypeBelongsTo(string $related, ?string $foreignKey = null, ?string $ownerKey = null): BelongsTo
     {
@@ -88,7 +88,7 @@ trait HasSubtypeRelations
      * @param string|null $relatedPivotKey Related model key on pivot table
      * @param string|null $parentKey Local key on subtype table
      * @param string|null $relatedKey Local key on related table
-     * @return BelongsToMany<TRelatedModel, $this>
+     * @return BelongsToMany
      */
     protected function subtypeBelongsToMany(string $related, ?string $table = null,
                                             ?string $foreignPivotKey = null, ?string $relatedPivotKey = null,

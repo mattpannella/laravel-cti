@@ -300,11 +300,10 @@ abstract class SubtypeModel extends Model
      * Create a new Eloquent query builder for the model.
      *
      * @param \Illuminate\Database\Query\Builder $query
-     * @return \Pannella\Cti\SubtypeQueryBuilder<static>
+     * @return \Pannella\Cti\SubtypeQueryBuilder
      */
     public function newEloquentBuilder($query): SubtypeQueryBuilder
     {
-        /** @var SubtypeQueryBuilder<static> */
         return new SubtypeQueryBuilder($query);
     }
 

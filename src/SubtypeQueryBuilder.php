@@ -10,9 +10,6 @@ use Illuminate\Database\Eloquent\Builder;
  * Extends Laravel's query builder to automatically join subtype tables
  * when querying subtype-specific columns. This allows seamless querying
  * across both parent and subtype tables.
- *
- * @template TModel of \Illuminate\Database\Eloquent\Model
- * @extends Builder<TModel>
  */
 class SubtypeQueryBuilder extends Builder
 {
@@ -237,7 +234,7 @@ class SubtypeQueryBuilder extends Builder
     /**
      * Add a "where between" clause to the query, handling subtype columns.
      *
-     * @param \Illuminate\Database\Query\Expression<float|int|string>|string $column
+     * @param \Illuminate\Database\Query\Expression|string $column
      * @param iterable<mixed> $values
      * @param string $boolean
      * @param bool $not
@@ -256,7 +253,7 @@ class SubtypeQueryBuilder extends Builder
     /**
      * Add an "order by" clause to the query, handling subtype columns.
      *
-     * @param \Closure|\Illuminate\Database\Query\Builder|\Illuminate\Database\Query\Expression<float|int|string>|string $column
+     * @param \Closure|\Illuminate\Database\Query\Builder|\Illuminate\Database\Query\Expression|string $column
      * @param string $direction
      * @return $this
      */
