@@ -1396,11 +1396,61 @@ class SubtypeModelTest extends TestCase
 
         $quiz = Quiz::find(1);
 
-        // Should not throw exception, but subtype fields should be null
+        // Should not throw exception; subtype fields should have cast-appropriate defaults
         $this->assertNotNull($quiz);
         $this->assertEquals('Quiz Without Subtype Data', $quiz->title);
-        $this->assertNull($quiz->passing_score);
-        $this->assertNull($quiz->time_limit);
+        $this->assertSame(0, $quiz->passing_score);
+        $this->assertSame(0, $quiz->time_limit);
+        $this->assertSame(false, $quiz->show_correct_answers);
+    }
+
+    /**
+     * Test that orphan records in a collection get cast-appropriate defaults instead of null.
+     */
+    public function testCollectionOrphanRecordsGetSubtypeDefaults(): void
+    {
+        // Create two parent records: one with subtype data, one without (orphan)
+        DB::table('assessment')->insert([
+            ['id' => 1, 'type_id' => 1, 'title' => 'Quiz With Data', 'enabled' => true],
+            ['id' => 2, 'type_id' => 1, 'title' => 'Quiz Without Data', 'enabled' => true],
+        ]);
+
+        // Only insert subtype data for the first quiz
+        DB::table('assessment_quiz')->insert([
+            'assessment_id' => 1,
+            'passing_score' => 80,
+            'time_limit' => 60,
+            'show_correct_answers' => true,
+        ]);
+
+        $quizzes = Quiz::query()->orderBy('id')->get();
+
+        $this->assertCount(2, $quizzes);
+
+        // First quiz should have its actual subtype data
+        $this->assertSame(80, $quizzes[0]->passing_score);
+        $this->assertSame(60, $quizzes[0]->time_limit);
+        $this->assertSame(true, $quizzes[0]->show_correct_answers);
+
+        // Second quiz (orphan) should have cast-appropriate defaults, not null
+        $this->assertSame(0, $quizzes[1]->passing_score);
+        $this->assertSame(0, $quizzes[1]->time_limit);
+        $this->assertSame(false, $quizzes[1]->show_correct_answers);
+        $this->assertNull($quizzes[1]->category_id); // no cast, so null is the default
+    }
+
+    /**
+     * Test that getSubtypeDefaults returns correct defaults based on casts.
+     */
+    public function testGetSubtypeDefaultsReturnsCastAppropriateValues(): void
+    {
+        $quiz = new Quiz();
+        $defaults = $quiz->getSubtypeDefaults();
+
+        $this->assertSame(0, $defaults['passing_score']); // integer cast
+        $this->assertSame(0, $defaults['time_limit']); // integer cast
+        $this->assertSame(false, $defaults['show_correct_answers']); // boolean cast
+        $this->assertNull($defaults['category_id']); // no cast
     }
 
     /**

@@ -285,6 +285,8 @@ abstract class SubtypeModel extends Model
             if ($data) {
                 $this->forceFill((array) $data);
                 $this->exists = true;
+            } else {
+                $this->forceFill($this->getSubtypeDefaults());
             }
 
             $this->subtypeDataLoaded = true;
@@ -315,6 +317,34 @@ abstract class SubtypeModel extends Model
     public function getSubtypeAttributes(): array
     {
         return $this->subtypeAttributes;
+    }
+
+    /**
+     * Get default values for subtype attributes based on their casts.
+     *
+     * Used when a parent record exists but has no corresponding subtype row,
+     * ensuring subtype attributes have sensible defaults instead of null.
+     *
+     * @return array<string, mixed>
+     */
+    public function getSubtypeDefaults(): array
+    {
+        $defaults = [];
+        $casts = $this->getCasts();
+
+        foreach ($this->subtypeAttributes as $attr) {
+            $cast = $casts[$attr] ?? null;
+            $defaults[$attr] = match ($cast) {
+                'int', 'integer' => 0,
+                'float', 'double', 'decimal' => 0.0,
+                'bool', 'boolean' => false,
+                'string' => '',
+                'array', 'json', 'object', 'collection' => null,
+                default => null,
+            };
+        }
+
+        return $defaults;
     }
 
     /**

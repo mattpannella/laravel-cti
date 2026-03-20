@@ -94,8 +94,10 @@ class SubtypedCollection extends Collection
                 $extra = $subdata[$model->getKey()] ?? null;
                 if ($extra) {
                     $model->forceFill((array) $extra);
-                    $model->syncOriginal();
+                } else {
+                    $model->forceFill($model->getSubtypeDefaults());
                 }
+                $model->syncOriginal();
                 // Mark subtype data as loaded regardless of whether data existed
                 $model->setSubtypeDataLoaded(true);
             }
