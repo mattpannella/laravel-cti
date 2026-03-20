@@ -2,8 +2,10 @@
 
 namespace Pannella\Cti;
 
+use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Database\Query\Builder;
 use Pannella\Cti\Exceptions\SubtypeException;
 use Pannella\Cti\Support\SubtypedCollection;
@@ -59,6 +61,13 @@ abstract class SubtypeModel extends Model
      * @var bool
      */
     protected bool $subtypeDataLoaded = false;
+
+    /**
+     * Whether the subtype record is missing from the database.
+     *
+     * @var bool
+     */
+    protected bool $subtypeDataMissing = false;
 
     /**
      * Cache of classes that have already passed subtype column validation.
@@ -285,6 +294,8 @@ abstract class SubtypeModel extends Model
             if ($data) {
                 $this->forceFill((array) $data);
                 $this->exists = true;
+            } else {
+                static::handleMissingSubtypeData(static::class, $key, $this);
             }
 
             $this->subtypeDataLoaded = true;
@@ -300,7 +311,7 @@ abstract class SubtypeModel extends Model
      * Create a new Eloquent query builder for the model.
      *
      * @param \Illuminate\Database\Query\Builder $query
-     * @return \Pannella\Cti\SubtypeQueryBuilder
+     * @return SubtypeQueryBuilder<\Illuminate\Database\Eloquent\Model>
      */
     public function newEloquentBuilder($query): SubtypeQueryBuilder
     {
@@ -325,6 +336,56 @@ abstract class SubtypeModel extends Model
     public function isSubtypeDataLoaded(): bool
     {
         return $this->subtypeDataLoaded;
+    }
+
+    /**
+     * Check if the subtype record is missing from the database.
+     *
+     * @return bool
+     */
+    public function isSubtypeDataMissing(): bool
+    {
+        return $this->subtypeDataMissing;
+    }
+
+    /**
+     * Handle a missing subtype record according to the configured strategy.
+     *
+     * @param string $model The model class name
+     * @param mixed $key The primary key value
+     * @throws SubtypeException When strategy is 'exception'
+     * @return void
+     */
+    public static function handleMissingSubtypeData(string $model, $key, SubtypeModel $instance): void
+    {
+        $strategy = 'log';
+        try {
+            $container = Container::getInstance();
+            if ($container->bound('config')) {
+                $strategy = $container->make('config')->get('cti.on_missing_subtype_data', 'log');
+            }
+        } catch (\Exception $e) {
+            // Container not available — use default
+        }
+
+        switch ($strategy) {
+            case 'exception':
+                throw SubtypeException::missingSubtypeData($model, $key);
+            case 'log':
+                if (class_exists(\Illuminate\Support\Facades\Log::class)) {
+                    try {
+                        Log::warning("Missing subtype record for {$model} with key {$key}");
+                    } catch (\RuntimeException $e) {
+                        // Log facade not available (e.g. outside Laravel app)
+                    }
+                }
+                $instance->subtypeDataMissing = true;
+                break;
+            case 'null':
+            default:
+                // Silent nulls — current legacy behavior
+                break;
+        }
     }
 
     /**

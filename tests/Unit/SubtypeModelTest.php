@@ -23,6 +23,7 @@ use Pannella\Cti\Tests\Fixtures\SoftDeletableQuiz;
 use Pannella\Cti\Exceptions\SubtypeException;
 use Pannella\Cti\SubtypeModel;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Config\Repository as ConfigRepository;
 
 class SubtypeModelTest extends TestCase
 {
@@ -1386,6 +1387,8 @@ class SubtypeModelTest extends TestCase
      */
     public function testLoadSubtypeDataWhenSubtypeRecordMissing(): void
     {
+        $this->setCtiConfig('log');
+
         // Create parent record but no subtype record
         DB::table('assessment')->insert([
             'id' => 1,
@@ -1396,11 +1399,12 @@ class SubtypeModelTest extends TestCase
 
         $quiz = Quiz::find(1);
 
-        // Should not throw exception, but subtype fields should be null
+        // Should not throw exception, but subtype fields should be null and flag should be set
         $this->assertNotNull($quiz);
         $this->assertEquals('Quiz Without Subtype Data', $quiz->title);
         $this->assertNull($quiz->passing_score);
         $this->assertNull($quiz->time_limit);
+        $this->assertTrue($quiz->isSubtypeDataMissing());
     }
 
     /**
@@ -3905,6 +3909,135 @@ class SubtypeModelTest extends TestCase
         $this->assertEquals(85, DB::table('assessment_quiz')->where('assessment_id', 2)->value('passing_score'));
         // Unmatched row unchanged
         $this->assertEquals(90, DB::table('assessment_quiz')->where('assessment_id', 3)->value('passing_score'));
+    }
+
+    // ============================================================
+    // Missing Subtype Data Strategy Tests
+    // ============================================================
+
+    protected function setCtiConfig(string $strategy): void
+    {
+        $container = Container::getInstance();
+        $config = new ConfigRepository(['cti' => ['on_missing_subtype_data' => $strategy]]);
+        $container->instance('config', $config);
+    }
+
+    public function testMissingSubtypeDataLogStrategySetsFlagOnLoad(): void
+    {
+        $this->setCtiConfig('log');
+
+        DB::table('assessment')->insert([
+            'id' => 1,
+            'type_id' => 1,
+            'title' => 'Orphan Quiz',
+            'enabled' => true,
+        ]);
+
+        $quiz = Quiz::find(1);
+
+        $this->assertNotNull($quiz);
+        $this->assertTrue($quiz->isSubtypeDataMissing());
+        $this->assertNull($quiz->passing_score);
+    }
+
+    public function testMissingSubtypeDataExceptionStrategyThrowsOnLoad(): void
+    {
+        $this->setCtiConfig('exception');
+
+        DB::table('assessment')->insert([
+            'id' => 1,
+            'type_id' => 1,
+            'title' => 'Orphan Quiz',
+            'enabled' => true,
+        ]);
+
+        $this->expectException(SubtypeException::class);
+        $this->expectExceptionMessage('Missing subtype record for');
+
+        Quiz::find(1);
+    }
+
+    public function testMissingSubtypeDataNullStrategySilent(): void
+    {
+        $this->setCtiConfig('null');
+
+        DB::table('assessment')->insert([
+            'id' => 1,
+            'type_id' => 1,
+            'title' => 'Orphan Quiz',
+            'enabled' => true,
+        ]);
+
+        $quiz = Quiz::find(1);
+
+        $this->assertNotNull($quiz);
+        $this->assertFalse($quiz->isSubtypeDataMissing());
+        $this->assertNull($quiz->passing_score);
+    }
+
+    public function testMissingSubtypeDataLogStrategySetsFlagOnCollectionLoad(): void
+    {
+        $this->setCtiConfig('log');
+
+        // Create two parent records, only one with subtype data
+        DB::table('assessment')->insert([
+            ['id' => 1, 'type_id' => 1, 'title' => 'Has Data', 'enabled' => true],
+            ['id' => 2, 'type_id' => 1, 'title' => 'Orphan', 'enabled' => true],
+        ]);
+        DB::table('assessment_quiz')->insert([
+            'assessment_id' => 1,
+            'passing_score' => 70,
+            'time_limit' => 30,
+            'show_correct_answers' => false,
+        ]);
+
+        $quizzes = Quiz::all();
+
+        $this->assertCount(2, $quizzes);
+
+        $hasData = $quizzes->firstWhere('id', 1);
+        $orphan = $quizzes->firstWhere('id', 2);
+
+        $this->assertFalse($hasData->isSubtypeDataMissing());
+        $this->assertEquals(70, $hasData->passing_score);
+
+        $this->assertTrue($orphan->isSubtypeDataMissing());
+        $this->assertNull($orphan->passing_score);
+    }
+
+    public function testMissingSubtypeDataExceptionStrategyThrowsOnCollectionLoad(): void
+    {
+        $this->setCtiConfig('exception');
+
+        DB::table('assessment')->insert([
+            'id' => 1,
+            'type_id' => 1,
+            'title' => 'Orphan Quiz',
+            'enabled' => true,
+        ]);
+
+        $this->expectException(SubtypeException::class);
+        $this->expectExceptionMessage('Missing subtype record for');
+
+        Quiz::all();
+    }
+
+    public function testMissingSubtypeDataNullStrategySilentOnCollectionLoad(): void
+    {
+        $this->setCtiConfig('null');
+
+        DB::table('assessment')->insert([
+            'id' => 1,
+            'type_id' => 1,
+            'title' => 'Orphan Quiz',
+            'enabled' => true,
+        ]);
+
+        $quizzes = Quiz::all();
+
+        $this->assertCount(1, $quizzes);
+        $this->assertFalse($quizzes->first()->isSubtypeDataMissing());
+        $this->assertNull($quizzes->first()->passing_score);
     }
 }
 

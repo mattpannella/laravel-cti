@@ -88,6 +88,18 @@ class SubtypeException extends CtiException
     }
 
     /**
+     * Create an exception for missing subtype data record.
+     *
+     * @param string $model The model class name
+     * @param mixed $key The primary key value
+     * @return self
+     */
+    public static function missingSubtypeData(string $model, $key): self
+    {
+        return new self("Missing subtype record for {$model} with key {$key}");
+    }
+
+    /**
      * Create an exception for overlapping columns between parent and subtype tables.
      *
      * @param string $class The model class name
