@@ -2,6 +2,7 @@
 
 namespace Pannella\Cti\Traits;
 
+use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Model;
 use Pannella\Cti\Attributes\CtiAttributeResolver;
 use Pannella\Cti\Exceptions\SubtypeException;
@@ -67,14 +68,16 @@ trait HasSubtypes
     /**
      * Resolve subtype label for a given type_id from the lookup table.
      *
+     * Uses container-scoped caching (safe for Octane/multi-tenant) and
+     * batch-loads all rows from the lookup table on first access to avoid
+     * N+1 queries when resolving multiple subtypes.
+     *
      * @param int|string $typeId The type identifier to resolve
      * @return string|null The resolved type label or null if not found
      * @throws SubtypeException When lookup table is not configured or resolution fails
      */
     public static function resolveSubtypeLabel(int|string $typeId): ?string
     {
-        static $cache = [];
-
         if (!$typeId) {
             return null;
         }
@@ -88,25 +91,36 @@ trait HasSubtypes
             }
 
             $connectionName = $instance->getConnectionName() ?? 'default';
+            $databaseName = $instance->getConnection()->getDatabaseName();
+            $cacheKey = "cti.lookup.{$connectionName}.{$databaseName}.{$lookupTable}";
 
-            if (isset($cache[$connectionName][$typeId])) {
-                return $cache[$connectionName][$typeId];
+            $cache = Container::getInstance()->has($cacheKey)
+                ? Container::getInstance()->make($cacheKey)
+                : null;
+
+            if (isset($cache[$typeId])) {
+                return $cache[$typeId];
             }
 
             $lookupKey = $instance->getSubtypeLookupKey();
             $lookupLabel = $instance->getSubtypeLookupLabel();
 
-            $type = $instance->getConnection()->table($lookupTable)
-                ->where($lookupKey, $typeId)
-                ->first();
+            // Load all rows from the lookup table at once to avoid N+1 queries
+            $cache = $cache ?? [];
+            $types = $instance->getConnection()->table($lookupTable)->get();
 
-            $label = $type?->{$lookupLabel};
+            foreach ($types as $type) {
+                $cache[$type->{$lookupKey}] = $type->{$lookupLabel};
+            }
+
+            Container::getInstance()->instance($cacheKey, $cache);
+
+            $label = $cache[$typeId] ?? null;
 
             if (!$label) {
                 throw SubtypeException::invalidSubtype((string) $typeId);
             }
 
-            $cache[$connectionName][$typeId] = $label;
             return $label;
         } catch (\Exception $e) {
             if ($e instanceof SubtypeException) {
