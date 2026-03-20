@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Database\Query\Builder;
+use Pannella\Cti\Attributes\CtiAttributeResolver;
 use Pannella\Cti\Exceptions\SubtypeException;
 use Pannella\Cti\Support\SubtypedCollection;
 use Pannella\Cti\Traits\HasSubtypeRelations;
@@ -96,8 +97,9 @@ abstract class SubtypeModel extends Model
         $model = parent::newFromBuilder($attributes, $connection);
 
         // Merge parent casts if parent class is defined
-        if ($model->ctiParentClass && class_exists($model->ctiParentClass)) {
-            $parent = new $model->ctiParentClass();
+        $parentClass = $model->getCtiParentClass();
+        if ($parentClass && class_exists($parentClass)) {
+            $parent = new $parentClass();
             $model->mergeCasts($parent->getCasts());
 
             // Apply casts to loaded attributes
@@ -123,7 +125,7 @@ abstract class SubtypeModel extends Model
         $this->validateSubtypeColumns();
 
         //if subtypeTable is not defined, or no subtypeAttributes, treat as a normal model save.
-        if (empty($this->subtypeTable) || empty($this->subtypeAttributes)) {
+        if (empty($this->getSubtypeTable()) || empty($this->getSubtypeAttributes())) {
             return parent::save($options);
         }
         return $this->getConnection()->transaction(function () use ($options) {
@@ -188,13 +190,14 @@ abstract class SubtypeModel extends Model
      */
     protected function saveSubtypeData(): void
     {
-        if (!$this->subtypeTable) {
+        $subtypeTable = $this->getSubtypeTable();
+        if (!$subtypeTable) {
             throw SubtypeException::missingTable();
         }
 
         try {
             // Get the primary key column name
-            $keyName = $this->subtypeKeyName ?? $this->getKeyName();
+            $keyName = $this->getSubtypeKeyName();
             $key = $this->getKey();
 
             if (!$key) {
@@ -202,10 +205,10 @@ abstract class SubtypeModel extends Model
             }
 
             // Filter model attributes to only include subtype attributes
-            $data = array_intersect_key($this->getAttributes(), array_flip($this->subtypeAttributes));
+            $data = array_intersect_key($this->getAttributes(), array_flip($this->getSubtypeAttributes()));
 
             // Use upsert to avoid TOCTOU race between exists() and insert()
-            $this->getConnection()->table($this->subtypeTable)
+            $this->getConnection()->table($subtypeTable)
                 ->upsert(
                     [array_merge([$keyName => $key], $data)],
                     [$keyName],
@@ -238,13 +241,14 @@ abstract class SubtypeModel extends Model
                 $isSoftDeleting = method_exists($this, 'trashed')
                     && !($this->forceDeleting ?? false);
 
-                if ($this->exists && $this->subtypeTable && !$isSoftDeleting) {
-                    $keyName = $this->subtypeKeyName ?? $this->getKeyName();
+                $subtypeTable = $this->getSubtypeTable();
+                if ($this->exists && $subtypeTable && !$isSoftDeleting) {
+                    $keyName = $this->getSubtypeKeyName();
                     if (!$this->getKey()) {
                         throw SubtypeException::missingTypeId(static::class);
                     }
 
-                    $this->getConnection()->table($this->subtypeTable)
+                    $this->getConnection()->table($subtypeTable)
                         ->where($keyName, $this->getKey())
                         ->delete();
                 }
@@ -275,19 +279,20 @@ abstract class SubtypeModel extends Model
     {
         $this->validateSubtypeColumns();
 
-        if (!$this->subtypeTable) {
+        $subtypeTable = $this->getSubtypeTable();
+        if (!$subtypeTable) {
             throw SubtypeException::missingTable();
         }
 
         try {
-            $keyName = $this->subtypeKeyName ?? $this->getKeyName();
+            $keyName = $this->getSubtypeKeyName();
             $key = $this->getKey();
 
             if (!$key) {
                 throw SubtypeException::missingTypeId(static::class);
             }
 
-            $data = $this->getConnection()->table($this->subtypeTable)
+            $data = $this->getConnection()->table($subtypeTable)
                 ->where($keyName, $key)
                 ->first();
 
@@ -325,7 +330,12 @@ abstract class SubtypeModel extends Model
      */
     public function getSubtypeAttributes(): array
     {
-        return $this->subtypeAttributes;
+        if (!empty($this->subtypeAttributes)) {
+            return $this->subtypeAttributes;
+        }
+
+        $attr = CtiAttributeResolver::resolveSubtype(static::class);
+        return $attr ? $attr->attributes : [];
     }
 
     /**
@@ -406,7 +416,12 @@ abstract class SubtypeModel extends Model
      */
     public function getSubtypeTable(): ?string
     {
-        return $this->subtypeTable;
+        if ($this->subtypeTable !== null) {
+            return $this->subtypeTable;
+        }
+
+        $attr = CtiAttributeResolver::resolveSubtype(static::class);
+        return $attr ? $attr->table : null;
     }
 
     /**
@@ -416,7 +431,16 @@ abstract class SubtypeModel extends Model
      */
     public function getSubtypeKeyName(): string
     {
-        return $this->subtypeKeyName ?? $this->getKeyName();
+        if ($this->subtypeKeyName !== null) {
+            return $this->subtypeKeyName;
+        }
+
+        $attr = CtiAttributeResolver::resolveSubtype(static::class);
+        if ($attr && $attr->keyName !== null) {
+            return $attr->keyName;
+        }
+
+        return $this->getKeyName();
     }
 
     /**
@@ -426,7 +450,12 @@ abstract class SubtypeModel extends Model
      */
     public function getCtiParentClass(): ?string
     {
-        return $this->ctiParentClass;
+        if ($this->ctiParentClass !== null) {
+            return $this->ctiParentClass;
+        }
+
+        $attr = CtiAttributeResolver::resolveSubtype(static::class);
+        return $attr ? $attr->parentClass : null;
     }
 
     /**
@@ -600,9 +629,10 @@ abstract class SubtypeModel extends Model
      */
     protected function getParentAttributes(): array
     {
-        $excludeColumns = $this->subtypeAttributes;
-        if ($this->subtypeKeyName) {
-            $excludeColumns[] = $this->subtypeKeyName;
+        $excludeColumns = $this->getSubtypeAttributes();
+        $subtypeKeyName = $this->getSubtypeKeyName();
+        if ($subtypeKeyName !== $this->getKeyName()) {
+            $excludeColumns[] = $subtypeKeyName;
         }
 
         return array_diff_key(
@@ -629,7 +659,7 @@ abstract class SubtypeModel extends Model
             return;
         }
 
-        if (empty($this->subtypeTable) || empty($this->subtypeAttributes)) {
+        if (empty($this->getSubtypeTable()) || empty($this->getSubtypeAttributes())) {
             static::$validatedSubtypeColumns[$class] = true;
             return;
         }
@@ -639,7 +669,7 @@ abstract class SubtypeModel extends Model
                 ->getSchemaBuilder()
                 ->getColumnListing($this->getTable());
 
-            $overlap = array_intersect($this->subtypeAttributes, $parentColumns);
+            $overlap = array_intersect($this->getSubtypeAttributes(), $parentColumns);
 
             if (!empty($overlap)) {
                 throw SubtypeException::overlappingColumns($class, array_values($overlap));
@@ -670,8 +700,9 @@ abstract class SubtypeModel extends Model
             return parent::__call($method, $parameters);
         } catch (\BadMethodCallException $e) {
             // If parent Model couldn't handle it, try parent CTI class
-            if ($this->ctiParentClass && class_exists($this->ctiParentClass)) {
-                $parentModel = new $this->ctiParentClass();
+            $parentClass = $this->getCtiParentClass();
+            if ($parentClass && class_exists($parentClass)) {
+                $parentModel = new $parentClass();
 
                 // Transfer state to parent model so relationships work correctly
                 $parentModel->setRawAttributes($this->getAttributes(), true);

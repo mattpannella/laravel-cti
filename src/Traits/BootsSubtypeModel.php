@@ -28,11 +28,10 @@ trait BootsSubtypeModel
         static::creating(function (SubtypeModel $model) {
             $modelClass = get_class($model); // E.g., YourApp\Models\Quiz
 
-            if (empty($model->ctiParentClass)) {
+            $ctiParentClass = $model->getCtiParentClass();
+            if (empty($ctiParentClass)) {
                 return;
             }
-
-            $ctiParentClass = $model->ctiParentClass;
 
             if (!class_exists($ctiParentClass)) {
                 return;

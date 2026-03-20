@@ -3,6 +3,7 @@
 namespace Pannella\Cti\Traits;
 
 use Illuminate\Database\Eloquent\Model;
+use Pannella\Cti\Attributes\CtiAttributeResolver;
 use Pannella\Cti\Exceptions\SubtypeException;
 use Pannella\Cti\Support\SubtypedCollection;
 
@@ -36,9 +37,11 @@ trait HasSubtypes
     {
         $instance = parent::newFromBuilder($attributes, $connection);
 
-        $typeId = data_get($attributes, static::$subtypeKey);
+        $subtypeKey = $this->getSubtypeKey();
+        $typeId = data_get($attributes, $subtypeKey);
         $label = $typeId ? static::resolveSubtypeLabel($typeId) : null;
-        $subclass = $label ? static::$subtypeMap[$label] ?? null : null;
+        $subtypeMap = $this->getSubtypeMap();
+        $subclass = $label ? $subtypeMap[$label] ?? null : null;
 
         if ($subclass && class_exists($subclass)) {
             // Create subtype instance with parent's casts applied
@@ -47,14 +50,14 @@ trait HasSubtypes
             $sub = (new $subclass())->newInstance([], true);
             $sub->mergeCasts($this->getCasts());
             $sub->setRawAttributes((array) $attributes, true);
-            
+
             // Manually apply casts to the attributes that were set
             foreach ($attributes as $key => $value) {
                 if ($sub->hasCast($key)) {
                     $sub->setAttribute($key, $value);
                 }
             }
-            
+
             return $sub;
         }
 
@@ -76,23 +79,28 @@ trait HasSubtypes
             return null;
         }
 
-        if (!static::$subtypeLookupTable) {
-            throw SubtypeException::missingLookupTable();
-        }
-
         try {
             $instance = new static();
+            $lookupTable = $instance->getSubtypeLookupTable();
+
+            if (!$lookupTable) {
+                throw SubtypeException::missingLookupTable();
+            }
+
             $connectionName = $instance->getConnectionName() ?? 'default';
 
             if (isset($cache[$connectionName][$typeId])) {
                 return $cache[$connectionName][$typeId];
             }
 
-            $type = $instance->getConnection()->table(static::$subtypeLookupTable)
-                ->where(static::$subtypeLookupKey, $typeId)
+            $lookupKey = $instance->getSubtypeLookupKey();
+            $lookupLabel = $instance->getSubtypeLookupLabel();
+
+            $type = $instance->getConnection()->table($lookupTable)
+                ->where($lookupKey, $typeId)
                 ->first();
 
-            $label = $type?->{static::$subtypeLookupLabel};
+            $label = $type?->{$lookupLabel};
 
             if (!$label) {
                 throw SubtypeException::invalidSubtype((string) $typeId);
@@ -113,7 +121,7 @@ trait HasSubtypes
      */
     public function getSubtypeLabel(): ?string
     {
-        $typeId = $this->{static::$subtypeKey} ?? null;
+        $typeId = $this->{$this->getSubtypeKey()} ?? null;
         return static::resolveSubtypeLabel($typeId);
     }
 
@@ -124,7 +132,12 @@ trait HasSubtypes
      */
     public function getSubtypeMap(): array
     {
-        return static::$subtypeMap ?? [];
+        if (isset(static::$subtypeMap)) {
+            return static::$subtypeMap;
+        }
+
+        $attr = CtiAttributeResolver::resolveSubtypeConfig(static::class);
+        return $attr ? $attr->map : [];
     }
 
     /**
@@ -147,10 +160,16 @@ trait HasSubtypes
      */
     public function getSubtypeKey(): string
     {
-        if (!isset(static::$subtypeKey)) {
-            throw SubtypeException::missingConfiguration(static::class, 'subtypeKey');
+        if (isset(static::$subtypeKey)) {
+            return static::$subtypeKey;
         }
-        return static::$subtypeKey;
+
+        $attr = CtiAttributeResolver::resolveSubtypeConfig(static::class);
+        if ($attr) {
+            return $attr->key;
+        }
+
+        throw SubtypeException::missingConfiguration(static::class, 'subtypeKey');
     }
 
     /**
@@ -158,12 +177,18 @@ trait HasSubtypes
      * @return string
      * @throws SubtypeException If not defined.
      */
-    public static function getSubtypeLookupTable(): string
+    public function getSubtypeLookupTable(): string
     {
-        if (!isset(static::$subtypeLookupTable)) {
-            throw SubtypeException::missingConfiguration(static::class, 'subtypeLookupTable');
+        if (isset(static::$subtypeLookupTable)) {
+            return static::$subtypeLookupTable;
         }
-        return static::$subtypeLookupTable;
+
+        $attr = CtiAttributeResolver::resolveSubtypeConfig(static::class);
+        if ($attr) {
+            return $attr->lookupTable;
+        }
+
+        throw SubtypeException::missingConfiguration(static::class, 'subtypeLookupTable');
     }
 
     /**
@@ -171,12 +196,18 @@ trait HasSubtypes
      * @return string
      * @throws SubtypeException If not defined.
      */
-    public static function getSubtypeLookupKey(): string
+    public function getSubtypeLookupKey(): string
     {
-        if (!isset(static::$subtypeLookupKey)) {
-            throw SubtypeException::missingConfiguration(static::class, 'subtypeLookupKey');
+        if (isset(static::$subtypeLookupKey)) {
+            return static::$subtypeLookupKey;
         }
-        return static::$subtypeLookupKey;
+
+        $attr = CtiAttributeResolver::resolveSubtypeConfig(static::class);
+        if ($attr) {
+            return $attr->lookupKey;
+        }
+
+        throw SubtypeException::missingConfiguration(static::class, 'subtypeLookupKey');
     }
 
     /**
@@ -184,11 +215,17 @@ trait HasSubtypes
      * @return string
      * @throws SubtypeException If not defined.
      */
-    public static function getSubtypeLookupLabel(): string
+    public function getSubtypeLookupLabel(): string
     {
-        if (!isset(static::$subtypeLookupLabel)) {
-            throw SubtypeException::missingConfiguration(static::class, 'subtypeLookupLabel');
+        if (isset(static::$subtypeLookupLabel)) {
+            return static::$subtypeLookupLabel;
         }
-        return static::$subtypeLookupLabel;
+
+        $attr = CtiAttributeResolver::resolveSubtypeConfig(static::class);
+        if ($attr) {
+            return $attr->lookupLabel;
+        }
+
+        throw SubtypeException::missingConfiguration(static::class, 'subtypeLookupLabel');
     }
 }

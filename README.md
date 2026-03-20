@@ -180,6 +180,71 @@ class Quiz extends SubtypeModel
 
 The discriminator column (`type_id`) is **auto-assigned on create** — you don't need to set it manually. The `BootsSubtypeModel` trait looks up the correct value from the lookup table based on the `$subtypeMap`. If the discriminator is already set, it won't be overridden.
 
+### PHP 8.1 Attribute-Based Configuration
+
+As an alternative to class properties, you can configure CTI models using PHP 8.1 attributes. This keeps all configuration in a single, declarative annotation at the top of your class.
+
+**Parent model with `#[SubtypeConfig]`:**
+
+```php
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Pannella\Cti\Attributes\SubtypeConfig;
+use Pannella\Cti\Traits\HasSubtypes;
+
+#[SubtypeConfig(
+    map: ['quiz' => Quiz::class, 'survey' => Survey::class],
+    key: 'type_id',
+    lookupTable: 'assessment_types',
+    lookupKey: 'id',
+    lookupLabel: 'label',
+)]
+class Assessment extends Model
+{
+    use HasSubtypes;
+
+    protected $fillable = ['title', 'type_id'];
+}
+```
+
+**Subtype model with `#[Subtype]`:**
+
+```php
+namespace App\Models;
+
+use Pannella\Cti\Attributes\Subtype;
+use Pannella\Cti\SubtypeModel;
+
+#[Subtype(
+    table: 'assessment_quiz',
+    attributes: ['passing_score', 'time_limit', 'show_correct_answers'],
+    parentClass: Assessment::class,
+    keyName: 'assessment_id',
+)]
+class Quiz extends SubtypeModel
+{
+    // $table must still be set to the parent table name
+    protected $table = 'assessments';
+
+    protected $fillable = [
+        'title',
+        'passing_score',
+        'time_limit',
+        'show_correct_answers',
+    ];
+}
+```
+
+| Attribute | Target | Parameters |
+|-----------|--------|------------|
+| `#[SubtypeConfig]` | Parent model | `map`, `key`, `lookupTable`, `lookupKey`, `lookupLabel` |
+| `#[Subtype]` | Subtype model | `table`, `attributes`, `parentClass`, `keyName` (optional, defaults to parent PK) |
+
+**Precedence:** When both a class property and an attribute are defined, the **property takes precedence**. This lets you use attributes as defaults and override individual values with properties when needed.
+
+**Performance:** Attribute resolution uses reflection, but results are cached per-class for the lifetime of the request. There is no performance difference after the first access.
+
 ### Using the Models
 
 Subtype data is loaded automatically whenever models are fetched via `get()`, `paginate()`, `find()`, `all()`, etc.
