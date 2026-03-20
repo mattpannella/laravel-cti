@@ -159,10 +159,9 @@ class Quiz extends SubtypeModel
 
     protected $ctiParentClass = Assessment::class;
 
-    // $fillable should include BOTH parent and subtype attributes
+    // Only subtype attributes needed — parent's $fillable is auto-inherited
     protected $fillable = [
-        'title',           // parent attribute
-        'passing_score',   // subtype attribute
+        'passing_score',
         'time_limit',
         'show_correct_answers',
     ];
@@ -176,7 +175,65 @@ class Quiz extends SubtypeModel
 | `$subtypeAttributes` | Array of column names that belong to the subtype table. **Must not overlap with parent table columns.** |
 | `$ctiParentClass` | Fully-qualified class name of the parent model |
 | `$subtypeKeyName` | *(Optional)* Foreign key column in the subtype table. Defaults to the parent model's primary key name (`id`) |
-| `$fillable` | Should include both parent and subtype attributes |
+| `$fillable` | Only subtype attributes needed — parent attributes are auto-inherited (see below) |
+| `$inheritParentFillable` | *(Optional)* Set to `false` to disable automatic `$fillable` inheritance from parent. Default: `true` |
+| `$excludeParentFillable` | *(Optional)* Array of parent `$fillable` attributes to exclude from inheritance |
+
+#### Automatic `$fillable` and `$casts` Inheritance
+
+Subtype models automatically inherit `$fillable` and `$casts` from their CTI parent model. You only need to declare subtype-specific attributes:
+
+```php
+class Quiz extends SubtypeModel
+{
+    protected $table = 'assessments';
+    protected $subtypeTable = 'assessment_quiz';
+    protected $subtypeAttributes = ['passing_score', 'time_limit', 'show_correct_answers'];
+    protected $ctiParentClass = Assessment::class;
+
+    // Only subtype attributes needed — parent's $fillable is auto-inherited
+    protected $fillable = [
+        'passing_score',
+        'time_limit',
+        'show_correct_answers',
+    ];
+
+    // Only subtype casts needed — parent's $casts is auto-inherited
+    protected $casts = [
+        'passing_score' => 'integer',
+        'show_correct_answers' => 'boolean',
+    ];
+}
+```
+
+**Precedence:**
+- `$casts`: Parent casts are merged first, then subtype casts overlay — subtype wins on conflicts.
+- `$fillable`: Parent and subtype arrays are merged and deduplicated. Existing subtypes that already list parent attributes continue to work (duplicates are removed).
+
+**Opt-out:** Set `$inheritParentFillable = false` to disable fillable inheritance entirely. Use `$excludeParentFillable` to exclude specific parent attributes. Both options work as class properties or via the `#[Subtype]` attribute:
+
+```php
+// Via class properties
+class Quiz extends SubtypeModel
+{
+    protected bool $inheritParentFillable = false; // don't inherit any parent fillable
+
+    // Or selectively exclude:
+    // protected array $excludeParentFillable = ['description'];
+}
+
+// Via attribute
+#[Subtype(
+    table: 'assessment_quiz',
+    attributes: ['passing_score', 'time_limit'],
+    parentClass: Assessment::class,
+    inheritParentFillable: false,
+    // excludeParentFillable: ['description'],
+)]
+class Quiz extends SubtypeModel { /* ... */ }
+```
+
+> **Note:** `$guarded` is never merged — it's a security boundary and must be set explicitly on each model.
 
 The discriminator column (`type_id`) is **auto-assigned on create** — you don't need to set it manually. The `BootsSubtypeModel` trait looks up the correct value from the lookup table based on the `$subtypeMap`. If the discriminator is already set, it won't be overridden.
 
@@ -227,8 +284,8 @@ class Quiz extends SubtypeModel
     // $table must still be set to the parent table name
     protected $table = 'assessments';
 
+    // Only subtype attributes needed — parent's $fillable is auto-inherited
     protected $fillable = [
-        'title',
         'passing_score',
         'time_limit',
         'show_correct_answers',
@@ -239,7 +296,7 @@ class Quiz extends SubtypeModel
 | Attribute | Target | Parameters |
 |-----------|--------|------------|
 | `#[SubtypeConfig]` | Parent model | `map`, `key`, `lookupTable`, `lookupKey`, `lookupLabel` |
-| `#[Subtype]` | Subtype model | `table`, `attributes`, `parentClass`, `keyName` (optional, defaults to parent PK) |
+| `#[Subtype]` | Subtype model | `table`, `attributes`, `parentClass`, `keyName` (optional), `inheritParentFillable` (optional), `excludeParentFillable` (optional) |
 
 **Precedence:** When both a class property and an attribute are defined, the **property takes precedence**. This lets you use attributes as defaults and override individual values with properties when needed.
 
@@ -470,13 +527,33 @@ When a parent model is loaded from the database, the `HasSubtypes` trait's `newF
 
 Both the parent model (via `HasSubtypes`) and subtype models (via `SubtypeModel`) return a `SubtypedCollection` from `newCollection()`. The collection's constructor groups models by subtype class and executes **one query per subtype table** to load all subtype data, eliminating N+1 queries.
 
-### Cast Inheritance
+### Cast and Fillable Inheritance
 
-Parent model casts are automatically merged into subtype instances. If `Assessment` defines `'type_id' => 'integer'`, that cast is applied when a `Quiz` is instantiated.
+Parent model `$casts` and `$fillable` are automatically merged into subtype instances during construction. This means fresh instances (`new Quiz()`) and DB-loaded instances both have the correct casts and fillable attributes. Subtype values take precedence on conflicts.
 
 ### Column Overlap Validation
 
-`$subtypeAttributes` must not contain any column names that also exist on the parent table. Overlapping columns break save, load, query, and replicate operations in subtle ways. The package validates this automatically on the first `save()` or `loadSubtypeData()` call for each model class (one schema query per class, cached for the lifetime of the request). If an overlap is detected, a `SubtypeException` is thrown immediately with a clear message listing the conflicting columns.
+`$subtypeAttributes` must not contain any column names that also exist on the parent table. The package validates this automatically on the first `save()` or `loadSubtypeData()` call for each model class (one schema query per class, cached for the lifetime of the request). If an overlap is detected, a `SubtypeException` is thrown immediately with a clear message listing the conflicting columns.
+
+**Why this restriction exists:** Internally, column names are the sole key used to route data between parent and subtype tables. Every operation — save, load, query — splits attributes by checking whether a column is in `$subtypeAttributes`. If the same column name exists in both tables:
+
+- **Saves** would send the value only to the subtype table, leaving the parent column NULL or stale
+- **Loads** would overwrite the parent's value with the subtype's value (which may be NULL) via `forceFill()`
+- **Queries** would produce ambiguous SQL column references after the auto-join
+
+This is a fundamental constraint of Eloquent's flat `$attributes` array — there's no way to store two values for the same key.
+
+**Workaround:** Rename the subtype column with a prefix. For example, if both your parent table and subtype table have a `description` column, rename the subtype column to `quiz_description`:
+
+```php
+// Migration
+Schema::table('assessment_quiz', function (Blueprint $table) {
+    $table->renameColumn('description', 'quiz_description');
+});
+
+// Model
+protected $subtypeAttributes = ['quiz_description', 'passing_score', 'time_limit'];
+```
 
 ### Transactions
 

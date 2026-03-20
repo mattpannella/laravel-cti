@@ -77,7 +77,8 @@ class Quiz extends SubtypeModel
     protected $ctiParentClass = Assessment::class;
     protected $subtypeKeyName = 'assessment_id'; // optional, defaults to parent PK
 
-    protected $fillable = ['title', 'passing_score', 'time_limit']; // both parent + subtype
+    // Only subtype attrs needed — parent's $fillable is auto-inherited
+    protected $fillable = ['passing_score', 'time_limit'];
 }
 ```
 
@@ -118,7 +119,8 @@ use Pannella\Cti\SubtypeModel;
 class Quiz extends SubtypeModel
 {
     protected $table = 'assessments'; // MUST be the parent table
-    protected $fillable = ['title', 'passing_score', 'time_limit'];
+    // Only subtype attrs needed — parent's $fillable is auto-inherited
+    protected $fillable = ['passing_score', 'time_limit'];
 }
 ```
 
@@ -127,8 +129,8 @@ When both a property and an attribute are defined, the property takes precedence
 ## Critical Rules
 
 - Subtype model `$table` MUST be set to the **parent** table name, not the subtype table.
-- `$subtypeAttributes` MUST NOT overlap with parent table columns.
-- `$fillable` on subtype models should include both parent and subtype attributes.
+- `$subtypeAttributes` MUST NOT overlap with parent table columns. Column names are the sole key used to route data between tables — overlapping names cause silent data loss on save and corrupted reads on load. If both tables need a similar column, prefix the subtype column (e.g., `quiz_description` instead of `description`).
+- `$fillable` and `$casts` are auto-inherited from the parent model. Subtypes only need to declare their own attributes. Set `$inheritParentFillable = false` (property or `#[Subtype]` attribute) to opt out of fillable inheritance. Use `$excludeParentFillable` to exclude specific parent attrs. `$guarded` is never merged.
 - The discriminator column (`type_id`) is auto-assigned on create — do not set it manually.
 - `save()` and `delete()` are wrapped in database transactions automatically.
 

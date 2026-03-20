@@ -16,6 +16,13 @@ trait BootsSubtypeModel
     protected static array $creatingTypeIdCache = [];
 
     /**
+     * Cache of parent model properties (fillable, casts) per subtype class.
+     *
+     * @var array<class-string, array{fillable: array<int, string>, casts: array<string, mixed>}>
+     */
+    protected static array $parentPropertyCache = [];
+
+    /**
      * The "booting" method of the model.
      *
      * @return void
@@ -74,6 +81,41 @@ trait BootsSubtypeModel
     }
 
     /**
+     * Initialize the trait on each model instance.
+     * Merges parent model's $fillable and $casts into the subtype model.
+     *
+     * @return void
+     */
+    public function initializeBootsSubtypeModel(): void
+    {
+        $parentClass = $this->getCtiParentClass();
+        if (empty($parentClass) || !class_exists($parentClass)) {
+            return;
+        }
+
+        if (!isset(static::$parentPropertyCache[static::class])) {
+            $parent = new $parentClass();
+            static::$parentPropertyCache[static::class] = [
+                'fillable' => $parent->getFillable(),
+                'casts' => $parent->getCasts(),
+            ];
+        }
+
+        $cached = static::$parentPropertyCache[static::class];
+
+        // Merge casts: subtype wins on conflict
+        $this->casts = array_merge($cached['casts'], $this->casts);
+
+        // Merge fillable (opt-out via $inheritParentFillable = false)
+        if ($this->getInheritParentFillable()) {
+            $parentFillable = array_diff($cached['fillable'], $this->getExcludeParentFillable());
+            $this->fillable = array_values(array_unique(
+                array_merge($parentFillable, $this->fillable)
+            ));
+        }
+    }
+
+    /**
      * Clear the creating type ID cache.
      * Useful for testing or when type definitions change at runtime.
      *
@@ -82,5 +124,6 @@ trait BootsSubtypeModel
     public static function clearTypeIdCache(): void
     {
         static::$creatingTypeIdCache = [];
+        static::$parentPropertyCache = [];
     }
 }

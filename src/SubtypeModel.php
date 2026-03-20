@@ -71,6 +71,20 @@ abstract class SubtypeModel extends Model
     protected bool $subtypeDataMissing = false;
 
     /**
+     * Whether to inherit $fillable from the CTI parent model.
+     *
+     * @var bool
+     */
+    protected bool $inheritParentFillable = true;
+
+    /**
+     * Parent fillable attributes to exclude from inheritance.
+     *
+     * @var array<int, string>
+     */
+    protected array $excludeParentFillable = [];
+
+    /**
      * Cache of classes that have already passed subtype column validation.
      *
      * @var array<class-string, true>
@@ -86,7 +100,8 @@ abstract class SubtypeModel extends Model
 
     /**
      * Create a new model instance from builder results.
-     * Merges parent model casts if $ctiParentClass is defined.
+     * Casts are already merged via initializeBootsSubtypeModel().
+     * Re-applies casts to loaded attributes so DB values are properly cast.
      *
      * @param array<string, mixed> $attributes
      * @param string|null $connection
@@ -96,17 +111,10 @@ abstract class SubtypeModel extends Model
     {
         $model = parent::newFromBuilder($attributes, $connection);
 
-        // Merge parent casts if parent class is defined
-        $parentClass = $model->getCtiParentClass();
-        if ($parentClass && class_exists($parentClass)) {
-            $parent = new $parentClass();
-            $model->mergeCasts($parent->getCasts());
-
-            // Apply casts to loaded attributes
-            foreach ((array)$attributes as $key => $value) {
-                if ($model->hasCast($key)) {
-                    $model->setAttribute($key, $value);
-                }
+        // Apply casts to loaded attributes (casts already merged by initializer)
+        foreach ((array)$attributes as $key => $value) {
+            if ($model->hasCast($key)) {
+                $model->setAttribute($key, $value);
             }
         }
 
@@ -456,6 +464,48 @@ abstract class SubtypeModel extends Model
 
         $attr = CtiAttributeResolver::resolveSubtype(static::class);
         return $attr ? $attr->parentClass : null;
+    }
+
+    /**
+     * Get whether this subtype model inherits parent fillable attributes.
+     * Checks class property first, then falls back to attribute configuration.
+     *
+     * @return bool
+     */
+    public function getInheritParentFillable(): bool
+    {
+        // If property was explicitly set to false on the class, respect it
+        if (!$this->inheritParentFillable) {
+            return false;
+        }
+
+        $attr = CtiAttributeResolver::resolveSubtype(static::class);
+        if ($attr && $attr->inheritParentFillable !== null) {
+            return $attr->inheritParentFillable;
+        }
+
+        return $this->inheritParentFillable;
+    }
+
+    /**
+     * Get the list of parent fillable attributes to exclude from inheritance.
+     * Checks class property first, then falls back to attribute configuration.
+     *
+     * @return array<int, string>
+     */
+    public function getExcludeParentFillable(): array
+    {
+        // If property was explicitly set on the class, use it
+        if (!empty($this->excludeParentFillable)) {
+            return $this->excludeParentFillable;
+        }
+
+        $attr = CtiAttributeResolver::resolveSubtype(static::class);
+        if ($attr && $attr->excludeParentFillable !== null) {
+            return $attr->excludeParentFillable;
+        }
+
+        return $this->excludeParentFillable;
     }
 
     /**
