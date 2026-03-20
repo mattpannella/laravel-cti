@@ -4,13 +4,22 @@
     "type": "library",
     "license": "MIT",
     "homepage": "https://github.com/mattpannella/laravel-cti",
+    "support": {
+        "issues": "https://github.com/mattpannella/laravel-cti/issues",
+        "source": "https://github.com/mattpannella/laravel-cti"
+    },
     "keywords": [
         "laravel",
+        "eloquent",
         "cti",
         "class table inheritance",
-        "subtype casting"
+        "inheritance",
+        "subtype casting",
+        "polymorphic",
+        "orm",
+        "multi-table"
     ],
-    "version": "3.1.0",
+    "version": "3.2.0",
     "authors": [
         {
             "name": "Matt Pannella",
@@ -23,8 +32,19 @@
     },
     "autoload": {
         "psr-4": {
-            "Pannella\\Cti\\": "src/",
+            "Pannella\\Cti\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
             "Pannella\\Cti\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Pannella\\Cti\\CtiServiceProvider"
+            ]
         }
     },
     "minimum-stability": "stable",
@@ -33,7 +53,9 @@
         "illuminate/events": ">=8.0 <14.0",
         "illuminate/container": ">=8.0 <14.0",
         "illuminate/queue": ">=8.0 <14.0",
-        "phpstan/phpstan": "^2.1"
+        "phpstan/phpstan": "^2.1",
+        "illuminate/config": ">=8.0 <14.0",
+        "illuminate/log": ">=8.0 <14.0"
     },
     "scripts": {
         "test": "vendor/bin/phpunit",

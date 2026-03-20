@@ -1,6 +1,8 @@
 # Laravel CTI
 
 [![Tests](https://github.com/mattpannella/laravel-cti/actions/workflows/tests.yml/badge.svg)](https://github.com/mattpannella/laravel-cti/actions/workflows/tests.yml)
+[![Latest Stable Version](https://poser.pugx.org/pannella/laravel-cti/v/stable)](https://packagist.org/packages/pannella/laravel-cti)
+[![License](https://poser.pugx.org/pannella/laravel-cti/license)](https://packagist.org/packages/pannella/laravel-cti)
 
 A Laravel package for implementing Class Table Inheritance pattern with Eloquent models. Unlike Laravel's polymorphic relations which denormalize data, CTI maintains proper database normalization by storing shared attributes in a parent table and subtype-specific attributes in separate tables.
 
@@ -14,13 +16,50 @@ A Laravel package for implementing Class Table Inheritance pattern with Eloquent
 
 ## Requirements
 
-- PHP ^8.0
-- Laravel 8.x – 12.x (`illuminate/database` >=8.0 <13.0)
+- PHP ^8.1
+- Laravel 8.x – 13.x (`illuminate/database` >=8.0 <14.0)
 
 ## Installation
 
 ```bash
 composer require pannella/laravel-cti
+```
+
+## Configuration
+
+The package works out of the box with sensible defaults — no configuration required. If you want to customize behavior, publish the config file:
+
+```bash
+php artisan vendor:publish --tag=cti-config
+```
+
+This creates `config/cti.php` in your application:
+
+```php
+return [
+    // 'exception', 'null', or 'log' (default)
+    'on_missing_subtype_data' => 'log',
+];
+```
+
+### Missing Subtype Data Handling
+
+When a parent record exists but its corresponding subtype row is missing (a data integrity issue), the `on_missing_subtype_data` option controls the behavior:
+
+| Value | Behavior |
+|-------|----------|
+| `'log'` *(default)* | Subtype attributes remain `null`, a warning is logged, and `$model->isSubtypeDataMissing()` returns `true` |
+| `'exception'` | Throws `SubtypeException` immediately |
+| `'null'` | Subtype attributes silently remain `null` — no warning, no flag |
+
+You can check for missing data programmatically:
+
+```php
+$quiz = Quiz::find(1);
+
+if ($quiz->isSubtypeDataMissing()) {
+    // Handle the data integrity issue
+}
 ```
 
 ## Quick Start
@@ -293,17 +332,23 @@ The following query builder methods support automatic subtype joins:
 
 | Method | Example |
 |--------|---------|
-| `where` | `Quiz::where('passing_score', '>', 70)` |
-| `whereIn` | `Quiz::whereIn('passing_score', [70, 80, 90])` |
-| `whereNotIn` | `Quiz::whereNotIn('time_limit', [30, 60])` |
-| `whereNull` | `Quiz::whereNull('time_limit')` |
-| `whereNotNull` | `Quiz::whereNotNull('passing_score')` |
-| `whereColumn` | `Quiz::whereColumn('passing_score', '>', 'time_limit')` |
-| `whereBetween` | `Quiz::whereBetween('passing_score', [60, 100])` |
-| `orderBy` | `Quiz::orderBy('time_limit')` |
+| `where` / `orWhere` | `Quiz::where('passing_score', '>', 70)` |
+| `whereIn` / `orWhereIn` | `Quiz::whereIn('passing_score', [70, 80, 90])` |
+| `whereNotIn` / `orWhereNotIn` | `Quiz::whereNotIn('time_limit', [30, 60])` |
+| `whereNull` / `orWhereNull` | `Quiz::whereNull('time_limit')` |
+| `whereNotNull` / `orWhereNotNull` | `Quiz::whereNotNull('passing_score')` |
+| `whereColumn` / `orWhereColumn` | `Quiz::whereColumn('passing_score', '>', 'time_limit')` |
+| `whereBetween` / `orWhereBetween` | `Quiz::whereBetween('passing_score', [60, 100])` |
+| `whereNotBetween` / `orWhereNotBetween` | `Quiz::whereNotBetween('passing_score', [0, 50])` |
+| `whereDate` / `whereYear` / `whereMonth` / `whereDay` | `Quiz::whereDate('created_at', '2024-01-01')` |
+| `orderBy` / `orderByDesc` | `Quiz::orderBy('time_limit')` |
+| `latest` / `oldest` | `Quiz::latest('time_limit')` |
 | `groupBy` | `Quiz::groupBy('passing_score')` |
 | `having` | `Quiz::groupBy('passing_score')->having('passing_score', '>', 70)` |
-| `select` | `Quiz::select('title', 'passing_score')` |
+| `select` / `addSelect` | `Quiz::select('title', 'passing_score')` |
+| `pluck` / `value` | `Quiz::pluck('passing_score')` |
+| `update` (mass) | `Quiz::where('passing_score', '<', 60)->update(['passing_score' => 60])` |
+| `increment` / `decrement` | `Quiz::where('passing_score', '<', 100)->increment('passing_score', 5)` |
 | Aggregates | `Quiz::avg('passing_score')`, `Quiz::sum('time_limit')`, etc. |
 
 ## Events
@@ -377,6 +422,10 @@ Parent model casts are automatically merged into subtype instances. If `Assessme
 - `replicate()` copies both parent and subtype attributes, automatically excluding the subtype foreign key so a new record can be created.
 - `refresh()` reloads both parent attributes and subtype data from the database.
 
+### Serialization
+
+`toArray()` and `toJson()` include both parent and subtype attributes, so API responses and JSON serialization work as expected without extra configuration.
+
 ## Known Limitations
 
 ### `cursor()` and `lazy()` Bypass Batch Loading
@@ -393,10 +442,6 @@ Quiz::cursor()->each(function (Quiz $quiz) {
 ### Soft Deletes
 
 Soft deletes are not handled on subtype tables. The parent table can use `SoftDeletes` normally, but the subtype row will remain even when the parent is soft-deleted.
-
-### Batch Loader Heuristic
-
-The batch loader checks if subtype data is already loaded by testing whether any subtype attribute is not `null`. If all subtype attributes for a given record are legitimately `null`, a redundant query may fire to re-load the data.
 
 ## License
 
