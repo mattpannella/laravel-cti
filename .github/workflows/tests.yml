@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        php: [8.1, 8.2, 8.3, 8.4]
+        php: [8.1, 8.2, 8.3, 8.4, 8.5]
         laravel: [8.*, 9.*, 10.*, 11.*, 12.*, 13.*]
         exclude:
           # PHP 8.1 exclusions
@@ -39,6 +39,16 @@ jobs:
             laravel: 9.*
           - php: 8.4
             laravel: 10.*
+
+          # PHP 8.5 exclusions
+          - php: 8.5
+            laravel: 8.*
+          - php: 8.5
+            laravel: 9.*
+          - php: 8.5
+            laravel: 10.*
+          - php: 8.5
+            laravel: 11.*
 
     name: PHP ${{ matrix.php }} - Laravel ${{ matrix.laravel }}
 

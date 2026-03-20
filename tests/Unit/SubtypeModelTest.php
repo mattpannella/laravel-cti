@@ -20,6 +20,11 @@ use Pannella\Cti\Tests\Fixtures\MisconfiguredAssessment;
 use Pannella\Cti\Tests\Fixtures\RegularModel;
 use Pannella\Cti\Tests\Fixtures\OverlappingColumnsQuiz;
 use Pannella\Cti\Tests\Fixtures\SoftDeletableQuiz;
+use Pannella\Cti\Tests\Fixtures\MinimalQuiz;
+use Pannella\Cti\Tests\Fixtures\NoInheritQuiz;
+use Pannella\Cti\Tests\Fixtures\ExcludeFieldQuiz;
+use Pannella\Cti\Tests\Fixtures\AttributeNoInheritQuiz;
+use Pannella\Cti\Tests\Fixtures\AttributeExcludeFieldQuiz;
 use Pannella\Cti\Exceptions\SubtypeException;
 use Pannella\Cti\SubtypeModel;
 use Illuminate\Database\Eloquent\Model;
@@ -78,6 +83,11 @@ class SubtypeModelTest extends TestCase
         Assessment::clearBootedModels();
         OverlappingColumnsQuiz::clearBootedModels();
         SoftDeletableQuiz::clearBootedModels();
+        MinimalQuiz::clearBootedModels();
+        NoInheritQuiz::clearBootedModels();
+        ExcludeFieldQuiz::clearBootedModels();
+        AttributeNoInheritQuiz::clearBootedModels();
+        AttributeExcludeFieldQuiz::clearBootedModels();
         Model::unsetEventDispatcher();
 
         // Reset the validation cache between tests
@@ -90,6 +100,11 @@ class SubtypeModelTest extends TestCase
         Quiz::clearTypeIdCache();
         Survey::clearTypeIdCache();
         SoftDeletableQuiz::clearTypeIdCache();
+        MinimalQuiz::clearTypeIdCache();
+        NoInheritQuiz::clearTypeIdCache();
+        ExcludeFieldQuiz::clearTypeIdCache();
+        AttributeNoInheritQuiz::clearTypeIdCache();
+        AttributeExcludeFieldQuiz::clearTypeIdCache();
 
         $this->db = null;
         $this->dispatcher = null;
@@ -4038,6 +4053,191 @@ class SubtypeModelTest extends TestCase
         $this->assertCount(1, $quizzes);
         $this->assertFalse($quizzes->first()->isSubtypeDataMissing());
         $this->assertNull($quizzes->first()->passing_score);
+    }
+
+    // =========================================================================
+    // Auto-inherit $fillable and $casts from CTI parent
+    // =========================================================================
+
+    public function testFreshInstanceHasParentCasts(): void
+    {
+        $quiz = new Quiz();
+
+        // 'enabled' is cast to boolean on the parent Assessment model
+        $this->assertTrue($quiz->hasCast('enabled'));
+        $this->assertTrue($quiz->hasCast('enabled', 'boolean'));
+
+        // Subtype casts should still be present
+        $this->assertTrue($quiz->hasCast('passing_score', 'integer'));
+        $this->assertTrue($quiz->hasCast('show_correct_answers', 'boolean'));
+    }
+
+    public function testSubtypeCastsTakePrecedenceOverParent(): void
+    {
+        // Assessment casts 'enabled' as boolean. If a subtype also casts it,
+        // the subtype cast should win.
+        $quiz = new Quiz();
+        $casts = $quiz->getCasts();
+
+        // Parent casts datetime for created_at/updated_at
+        $this->assertArrayHasKey('created_at', $casts);
+
+        // Subtype casts should be present and take precedence
+        $this->assertEquals('integer', $casts['passing_score']);
+        $this->assertEquals('boolean', $casts['show_correct_answers']);
+    }
+
+    public function testGetFillableReturnsMergedParentAndSubtypeAttributes(): void
+    {
+        $quiz = new Quiz();
+        $fillable = $quiz->getFillable();
+
+        // Parent fillable attrs
+        $this->assertContains('type_id', $fillable);
+        $this->assertContains('title', $fillable);
+        $this->assertContains('description', $fillable);
+        $this->assertContains('enabled', $fillable);
+
+        // Subtype fillable attrs
+        $this->assertContains('passing_score', $fillable);
+        $this->assertContains('time_limit', $fillable);
+        $this->assertContains('show_correct_answers', $fillable);
+        $this->assertContains('category_id', $fillable);
+    }
+
+    public function testExistingSubtypeWithDuplicateParentFillableGetsDeduplicated(): void
+    {
+        // Quiz already lists parent attrs in its own $fillable.
+        // With inheritance, they should appear only once.
+        $quiz = new Quiz();
+        $fillable = $quiz->getFillable();
+
+        $titleCount = count(array_filter($fillable, fn($v) => $v === 'title'));
+        $this->assertEquals(1, $titleCount);
+    }
+
+    public function testMinimalSubtypeInheritsParentFillable(): void
+    {
+        // MinimalQuiz only declares subtype attrs in $fillable
+        $quiz = new MinimalQuiz();
+        $fillable = $quiz->getFillable();
+
+        // Should have inherited parent attrs
+        $this->assertContains('type_id', $fillable);
+        $this->assertContains('title', $fillable);
+        $this->assertContains('description', $fillable);
+        $this->assertContains('enabled', $fillable);
+
+        // Subtype attrs still present
+        $this->assertContains('passing_score', $fillable);
+        $this->assertContains('time_limit', $fillable);
+    }
+
+    public function testInheritParentFillableFalseDisablesMerge(): void
+    {
+        $quiz = new NoInheritQuiz();
+        $fillable = $quiz->getFillable();
+
+        // Should NOT have parent attrs
+        $this->assertNotContains('title', $fillable);
+        $this->assertNotContains('description', $fillable);
+        $this->assertNotContains('enabled', $fillable);
+
+        // Subtype attrs should still be present
+        $this->assertContains('passing_score', $fillable);
+        $this->assertContains('time_limit', $fillable);
+    }
+
+    public function testExcludeParentFillableExcludesSpecificAttrs(): void
+    {
+        $quiz = new ExcludeFieldQuiz();
+        $fillable = $quiz->getFillable();
+
+        // 'description' should be excluded
+        $this->assertNotContains('description', $fillable);
+
+        // Other parent attrs should be present
+        $this->assertContains('type_id', $fillable);
+        $this->assertContains('title', $fillable);
+        $this->assertContains('enabled', $fillable);
+
+        // Subtype attrs should be present
+        $this->assertContains('passing_score', $fillable);
+    }
+
+    public function testNoInheritQuizStillGetsCastsFromParent(): void
+    {
+        // Even with $inheritParentFillable = false, casts should always be merged
+        $quiz = new NoInheritQuiz();
+        $this->assertTrue($quiz->hasCast('enabled', 'boolean'));
+        $this->assertTrue($quiz->hasCast('passing_score', 'integer'));
+    }
+
+    public function testMinimalQuizMassAssignmentWorksWithInheritedFillable(): void
+    {
+        $quiz = new MinimalQuiz();
+        $quiz->fill([
+            'title' => 'Test Quiz',
+            'description' => 'A test',
+            'enabled' => true,
+            'passing_score' => 75,
+            'time_limit' => 30,
+        ]);
+
+        $this->assertEquals('Test Quiz', $quiz->title);
+        $this->assertEquals('A test', $quiz->description);
+        $this->assertEquals(75, $quiz->passing_score);
+        $this->assertEquals(30, $quiz->time_limit);
+    }
+
+    public function testGetInheritParentFillableReturnsCorrectValue(): void
+    {
+        $quiz = new Quiz();
+        $this->assertTrue($quiz->getInheritParentFillable());
+
+        $noInherit = new NoInheritQuiz();
+        $this->assertFalse($noInherit->getInheritParentFillable());
+    }
+
+    public function testGetExcludeParentFillableReturnsCorrectValue(): void
+    {
+        $quiz = new Quiz();
+        $this->assertEmpty($quiz->getExcludeParentFillable());
+
+        $exclude = new ExcludeFieldQuiz();
+        $this->assertEquals(['description'], $exclude->getExcludeParentFillable());
+    }
+
+    public function testAttributeBasedNoInheritDisablesFillableMerge(): void
+    {
+        $quiz = new AttributeNoInheritQuiz();
+        $fillable = $quiz->getFillable();
+
+        $this->assertFalse($quiz->getInheritParentFillable());
+        $this->assertNotContains('title', $fillable);
+        $this->assertNotContains('description', $fillable);
+        $this->assertContains('passing_score', $fillable);
+    }
+
+    public function testAttributeBasedExcludeFieldExcludesSpecificAttrs(): void
+    {
+        $quiz = new AttributeExcludeFieldQuiz();
+        $fillable = $quiz->getFillable();
+
+        $this->assertEquals(['description'], $quiz->getExcludeParentFillable());
+        $this->assertNotContains('description', $fillable);
+        $this->assertContains('title', $fillable);
+        $this->assertContains('type_id', $fillable);
+        $this->assertContains('passing_score', $fillable);
+    }
+
+    public function testAttributeBasedSubtypeStillInheritsCasts(): void
+    {
+        $quiz = new AttributeNoInheritQuiz();
+
+        // Casts always merge regardless of fillable setting
+        $this->assertTrue($quiz->hasCast('enabled', 'boolean'));
+        $this->assertTrue($quiz->hasCast('passing_score', 'integer'));
     }
 }
 

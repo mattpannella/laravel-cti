@@ -112,7 +112,10 @@ class SubtypeException extends CtiException
 
         return new self(
             "{$class} has \$subtypeAttributes that overlap with parent table columns: {$cols}. "
-            . "Subtype attributes must be unique to the subtype table."
+            . "Subtype attributes must be unique to the subtype table. "
+            . "Consider renaming the subtype column(s) with a prefix (e.g., '"
+            . preg_replace('/^.*\\\\/', '', strtolower($class)) . "_{$columns[0]}') "
+            . "and creating a migration to update the subtype table."
         );
     }
 }
