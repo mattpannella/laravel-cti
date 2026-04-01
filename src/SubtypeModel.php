@@ -287,10 +287,12 @@ abstract class SubtypeModel extends Model
     {
         $this->validateSubtypeColumns();
 
-        $subtypeTable = $this->getSubtypeTable();
-        if (!$subtypeTable) {
-            throw SubtypeException::missingTable();
+        if (empty($this->getSubtypeTable()) || empty($this->getSubtypeAttributes())) {
+            $this->subtypeDataLoaded = true;
+            return;
         }
+
+        $subtypeTable = $this->getSubtypeTable();
 
         try {
             $keyName = $this->getSubtypeKeyName();
