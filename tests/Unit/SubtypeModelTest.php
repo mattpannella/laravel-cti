@@ -2465,7 +2465,6 @@ class SubtypeModelTest extends TestCase
     protected function resetValidationCache(): void
     {
         $ref = new \ReflectionProperty(SubtypeModel::class, 'validatedSubtypeColumns');
-        $ref->setAccessible(true);
         $ref->setValue(null, []);
     }
 
