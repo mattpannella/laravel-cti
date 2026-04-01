@@ -307,7 +307,8 @@ abstract class SubtypeModel extends Model
                 ->first();
 
             if ($data) {
-                $this->forceFill((array) $data);
+                $allowed = array_flip([...$this->getSubtypeAttributes(), $keyName]);
+                $this->forceFill(array_intersect_key((array) $data, $allowed));
                 $this->exists = true;
             } else {
                 static::handleMissingSubtypeData(static::class, $key, $this);

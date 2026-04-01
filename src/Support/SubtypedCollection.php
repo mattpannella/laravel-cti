@@ -93,7 +93,8 @@ class SubtypedCollection extends Collection
             foreach ($models as $model) {
                 $extra = $subdata[$model->getKey()] ?? null;
                 if ($extra) {
-                    $model->forceFill((array) $extra);
+                    $allowed = array_flip([...$model->getSubtypeAttributes(), $subtypeKeyName]);
+                    $model->forceFill(array_intersect_key((array) $extra, $allowed));
                     $model->syncOriginal();
                 } else {
                     SubtypeModel::handleMissingSubtypeData(get_class($model), $model->getKey(), $model);
