@@ -92,6 +92,12 @@ class SubtypeDiscriminatorScope implements Scope
                 return null;
             }
 
+            // Direct mode: use the label string as the discriminator value
+            if (!$parentInstance->usesLookupTable()) {
+                static::$typeIdCache[$modelClass] = $label;
+                return $label;
+            }
+
             // Look up the type ID from the lookup table
             $lookupTable = $parentInstance->getSubtypeLookupTable();
             $lookupKeyCol = $parentInstance->getSubtypeLookupKey();
