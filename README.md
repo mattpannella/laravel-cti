@@ -4,7 +4,43 @@
 [![Latest Stable Version](https://poser.pugx.org/pannella/laravel-cti/v/stable)](https://packagist.org/packages/pannella/laravel-cti)
 [![License](https://poser.pugx.org/pannella/laravel-cti/license)](https://packagist.org/packages/pannella/laravel-cti)
 
-A Laravel package for implementing Class Table Inheritance pattern with Eloquent models. Unlike Laravel's polymorphic relations which denormalize data, CTI maintains proper database normalization by storing shared attributes in a parent table and subtype-specific attributes in separate tables.
+A Laravel package for implementing the Class Table Inheritance (CTI) pattern with Eloquent models. Shared attributes live in a parent table, type-specific attributes live in separate subtype tables, and the package handles type resolution, querying, and persistence automatically.
+
+## Why CTI?
+
+If you have a type hierarchy in Laravel (for example, `Quiz` and `Survey` are both types of `Assessment`), there are a few common ways to model it. Each has tradeoffs.
+
+### Single Table Inheritance (STI)
+
+One table holds every column for every type, with a discriminator column to distinguish them.
+
+- **Pros:** Simple queries, no joins, easy to set up.
+- **Cons:** You end up with a lot of nullable columns that don't apply to most rows, and the table gets wider every time you add a new type. This violates normalization: you're storing NULLs for columns that are structurally irrelevant to a given row, not just empty.
+
+### Separate Tables
+
+Each type gets its own table (`quizzes`, `surveys`) with shared columns duplicated in each one.
+
+- **Pros:** Clean per-type schemas, no NULLs.
+- **Cons:** Shared columns are duplicated across tables. There's no unified way to query "all assessments." If you need to change a shared attribute, you have to update every table.
+
+### Polymorphic Relations
+
+Laravel's `morphTo`/`morphMany` pattern stores a `*_type` and `*_id` pair so one entity can relate to multiple unrelated model types.
+
+- **Pros:** Flexible, built into Eloquent, and works well for its intended purpose (e.g., a `Comment` that can belong to either a `Post` or a `Video`).
+- **Cons:** Polymorphic relations are a relationship pattern, not an inheritance pattern. They solve "entity A relates to multiple unrelated entity types," not "entities A1 and A2 are specialized versions of entity A." Because the `*_id` column references different tables depending on the type value, you can't put a real foreign key constraint on it. Referential integrity is only enforceable in application code. Trying to use polymorphic relations to model a type hierarchy requires a lot of custom wiring and you lose the ability to query the parent type as a unified collection.
+
+### Class Table Inheritance (this package)
+
+Shared attributes live in a parent table, type-specific attributes live in separate subtype tables linked by foreign key.
+
+- **Pros:** Properly normalized. No nullable columns, no duplicated columns, real foreign key constraints everywhere. You can query the parent type and get back a mixed collection of correctly-typed subtype instances. Subtype-specific queries auto-join as needed.
+- **Cons:** More tables to manage. Reads require joins (handled automatically by the package). Writes touch multiple tables (wrapped in transactions by the package). Initial setup is a bit more involved than STI.
+
+### When to use CTI
+
+CTI is the right fit when your subtypes share an identity (a Quiz *is* an Assessment), share common attributes (title, timestamps), and each type also has its own attributes (passing_score, anonymous). If your types are unrelated entities that just happen to share a relationship, polymorphic relations are the better tool.
 
 ## Features
 
@@ -12,7 +48,7 @@ A Laravel package for implementing Class Table Inheritance pattern with Eloquent
 - Seamless saving/updating across parent and subtype tables
 - Automatic batch-loading of subtype data (no N+1 queries)
 - Support for Eloquent events and relationships
-- Full type safety and referential integrity
+- Database-enforced referential integrity with real foreign keys
 
 ## Requirements
 
