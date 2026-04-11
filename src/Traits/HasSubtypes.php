@@ -18,6 +18,8 @@ use Pannella\Cti\Support\SubtypedCollection;
  * Required static properties:
  * @property-read array<string, class-string> $subtypeMap Mapping of type labels to subtype class names
  * @property-read string $subtypeKey Column name containing the type identifier
+ *
+ * Optional static properties (required only when using a lookup table):
  * @property-read string $subtypeLookupTable Table name containing type definitions
  * @property-read string $subtypeLookupKey Primary key column in lookup table
  * @property-read string $subtypeLookupLabel Column containing type label in lookup table
@@ -84,6 +86,12 @@ trait HasSubtypes
 
         try {
             $instance = new static();
+
+            // Direct mode: discriminator column contains the label directly
+            if (!$instance->usesLookupTable()) {
+                return (string) $typeId;
+            }
+
             $lookupTable = $instance->getSubtypeLookupTable();
 
             if (!$lookupTable) {
@@ -168,6 +176,25 @@ trait HasSubtypes
     // New Public Static Accessors
 
     /**
+     * Determine whether this model uses a lookup table for type resolution.
+     *
+     * When true, the discriminator column contains a foreign key to a lookup table.
+     * When false, the discriminator column contains the type label directly.
+     *
+     * @return bool
+     */
+    public function usesLookupTable(): bool
+    {
+        if (isset(static::$subtypeLookupTable)) {
+            return true;
+        }
+
+        $attr = CtiAttributeResolver::resolveSubtypeConfig(static::class);
+
+        return $attr !== null && $attr->lookupTable !== null;
+    }
+
+    /**
      * Get the subtype key (discriminator column name).
      * @return string
      * @throws SubtypeException If not defined.
@@ -188,58 +215,55 @@ trait HasSubtypes
 
     /**
      * Get the static subtype lookup table name.
-     * @return string
-     * @throws SubtypeException If not defined.
+     * @return string|null Returns null when no lookup table is configured (direct discriminator mode).
      */
-    public function getSubtypeLookupTable(): string
+    public function getSubtypeLookupTable(): ?string
     {
         if (isset(static::$subtypeLookupTable)) {
             return static::$subtypeLookupTable;
         }
 
         $attr = CtiAttributeResolver::resolveSubtypeConfig(static::class);
-        if ($attr) {
+        if ($attr && $attr->lookupTable !== null) {
             return $attr->lookupTable;
         }
 
-        throw SubtypeException::missingConfiguration(static::class, 'subtypeLookupTable');
+        return null;
     }
 
     /**
      * Get the static subtype lookup key name (PK in lookup table).
-     * @return string
-     * @throws SubtypeException If not defined.
+     * @return string|null Returns null when no lookup table is configured (direct discriminator mode).
      */
-    public function getSubtypeLookupKey(): string
+    public function getSubtypeLookupKey(): ?string
     {
         if (isset(static::$subtypeLookupKey)) {
             return static::$subtypeLookupKey;
         }
 
         $attr = CtiAttributeResolver::resolveSubtypeConfig(static::class);
-        if ($attr) {
+        if ($attr && $attr->lookupKey !== null) {
             return $attr->lookupKey;
         }
 
-        throw SubtypeException::missingConfiguration(static::class, 'subtypeLookupKey');
+        return null;
     }
 
     /**
      * Get the static subtype lookup label name (label column in lookup table).
-     * @return string
-     * @throws SubtypeException If not defined.
+     * @return string|null Returns null when no lookup table is configured (direct discriminator mode).
      */
-    public function getSubtypeLookupLabel(): string
+    public function getSubtypeLookupLabel(): ?string
     {
         if (isset(static::$subtypeLookupLabel)) {
             return static::$subtypeLookupLabel;
         }
 
         $attr = CtiAttributeResolver::resolveSubtypeConfig(static::class);
-        if ($attr) {
+        if ($attr && $attr->lookupLabel !== null) {
             return $attr->lookupLabel;
         }
 
-        throw SubtypeException::missingConfiguration(static::class, 'subtypeLookupLabel');
+        return null;
     }
 }

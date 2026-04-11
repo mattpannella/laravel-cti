@@ -66,7 +66,9 @@ if ($quiz->isSubtypeDataMissing()) {
 
 ### Database Schema
 
-CTI requires three types of tables: a **lookup table** for type definitions, a **parent table** for shared attributes, and one or more **subtype tables** for type-specific attributes.
+CTI requires a **parent table** for shared attributes and one or more **subtype tables** for type-specific attributes. For type resolution, you can use either a **lookup table** (maps integer IDs to type labels) or a **direct discriminator column** (stores the type label as a string directly on the parent table).
+
+#### With Lookup Table
 
 ```php
 // Lookup table — stores the type definitions
@@ -86,24 +88,50 @@ Schema::create('assessments', function (Blueprint $table) {
 // Subtype table — quiz-specific attributes
 // The primary key references the parent table's primary key
 Schema::create('assessment_quiz', function (Blueprint $table) {
-    $table->unsignedBigInteger('id')->primary();
+    $table->unsignedBigInteger('assessment_id')->primary();
     $table->integer('passing_score')->nullable();
     $table->integer('time_limit')->nullable();
     $table->boolean('show_correct_answers')->default(false);
 
-    $table->foreign('id')->references('id')->on('assessments')->onDelete('cascade');
+    $table->foreign('assessment_id')->references('id')->on('assessments')->onDelete('cascade');
 });
 
 // Subtype table — survey-specific attributes
 Schema::create('assessment_survey', function (Blueprint $table) {
-    $table->unsignedBigInteger('id')->primary();
+    $table->unsignedBigInteger('assessment_id')->primary();
     $table->boolean('anonymous')->default(false);
 
-    $table->foreign('id')->references('id')->on('assessments')->onDelete('cascade');
+    $table->foreign('assessment_id')->references('id')->on('assessments')->onDelete('cascade');
+});
+```
+
+#### Without Lookup Table (Direct Discriminator)
+
+If you prefer a simpler schema, the parent table can store the type label directly in a string column instead of a foreign key to a lookup table:
+
+```php
+// Parent table — type stored as a string column
+Schema::create('assessments', function (Blueprint $table) {
+    $table->id();
+    $table->string('title');
+    $table->string('type');  // stores 'quiz', 'survey', etc. directly
+    $table->timestamps();
+});
+
+// Subtype tables remain the same
+Schema::create('assessment_quiz', function (Blueprint $table) {
+    $table->unsignedBigInteger('assessment_id')->primary();
+    $table->integer('passing_score')->nullable();
+    $table->integer('time_limit')->nullable();
+    $table->boolean('show_correct_answers')->default(false);
+
+    $table->foreign('assessment_id')->references('id')->on('assessments')->onDelete('cascade');
 });
 ```
 
 ### Parent Model
+
+With a lookup table:
 
 ```php
 namespace App\Models;
@@ -115,7 +143,6 @@ class Assessment extends Model
 {
     use HasSubtypes;
 
-    // All properties are protected static
     protected static $subtypeMap = [
         'quiz' => Quiz::class,
         'survey' => Survey::class,
@@ -130,13 +157,38 @@ class Assessment extends Model
 }
 ```
 
+Without a lookup table (direct discriminator):
+
+```php
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Pannella\Cti\Traits\HasSubtypes;
+
+class Assessment extends Model
+{
+    use HasSubtypes;
+
+    protected static $subtypeMap = [
+        'quiz' => Quiz::class,
+        'survey' => Survey::class,
+    ];
+
+    protected static $subtypeKey = 'type';  // Column contains the label directly
+
+    // No $subtypeLookupTable, $subtypeLookupKey, or $subtypeLookupLabel needed
+
+    protected $fillable = ['title', 'type'];
+}
+```
+
 | Property | Description |
 |----------|-------------|
-| `$subtypeMap` | Maps type labels (from the lookup table) to subtype class names |
-| `$subtypeKey` | Column on the parent table that references the lookup table |
-| `$subtypeLookupTable` | Table containing type definitions |
-| `$subtypeLookupKey` | Primary key column in the lookup table |
-| `$subtypeLookupLabel` | Label column in the lookup table (values must match `$subtypeMap` keys) |
+| `$subtypeMap` | Maps type labels to subtype class names |
+| `$subtypeKey` | Discriminator column on the parent table (FK to lookup table, or direct string label) |
+| `$subtypeLookupTable` | *(Optional)* Table containing type definitions. Omit for direct discriminator mode |
+| `$subtypeLookupKey` | *(Optional)* Primary key column in the lookup table |
+| `$subtypeLookupLabel` | *(Optional)* Label column in the lookup table (values must match `$subtypeMap` keys) |
 
 ### Subtype Model
 
@@ -235,13 +287,13 @@ class Quiz extends SubtypeModel { /* ... */ }
 
 > **Note:** `$guarded` is never merged — it's a security boundary and must be set explicitly on each model.
 
-The discriminator column (`type_id`) is **auto-assigned on create** — you don't need to set it manually. The `BootsSubtypeModel` trait looks up the correct value from the lookup table based on the `$subtypeMap`. If the discriminator is already set, it won't be overridden.
+The discriminator column is **auto-assigned on create** — you don't need to set it manually. The `BootsSubtypeModel` trait resolves the correct value from the lookup table (or uses the label string directly in direct discriminator mode) based on the `$subtypeMap`. If the discriminator is already set, it won't be overridden.
 
 ### PHP 8.1 Attribute-Based Configuration
 
 As an alternative to class properties, you can configure CTI models using PHP 8.1 attributes. This keeps all configuration in a single, declarative annotation at the top of your class.
 
-**Parent model with `#[SubtypeConfig]`:**
+**Parent model with `#[SubtypeConfig]` (with lookup table):**
 
 ```php
 namespace App\Models;
@@ -262,6 +314,21 @@ class Assessment extends Model
     use HasSubtypes;
 
     protected $fillable = ['title', 'type_id'];
+}
+```
+
+**Parent model with `#[SubtypeConfig]` (direct discriminator — no lookup table):**
+
+```php
+#[SubtypeConfig(
+    map: ['quiz' => Quiz::class, 'survey' => Survey::class],
+    key: 'type',
+)]
+class Assessment extends Model
+{
+    use HasSubtypes;
+
+    protected $fillable = ['title', 'type'];
 }
 ```
 
@@ -295,7 +362,7 @@ class Quiz extends SubtypeModel
 
 | Attribute | Target | Parameters |
 |-----------|--------|------------|
-| `#[SubtypeConfig]` | Parent model | `map`, `key`, `lookupTable`, `lookupKey`, `lookupLabel` |
+| `#[SubtypeConfig]` | Parent model | `map`, `key`, `lookupTable` (optional), `lookupKey` (optional), `lookupLabel` (optional) |
 | `#[Subtype]` | Subtype model | `table`, `attributes`, `parentClass`, `keyName` (optional), `inheritParentFillable` (optional), `excludeParentFillable` (optional) |
 
 **Precedence:** When both a class property and an attribute are defined, the **property takes precedence**. This lets you use attributes as defaults and override individual values with properties when needed.
@@ -521,7 +588,7 @@ protected $dispatchesEvents = [
 
 ### Type Resolution
 
-When a parent model is loaded from the database, the `HasSubtypes` trait's `newFromBuilder()` method reads the discriminator column (`type_id`), looks up the corresponding label from the lookup table, and maps it to a subtype class via `$subtypeMap`. The returned model is an instance of the subtype class with all parent attributes set.
+When a parent model is loaded from the database, the `HasSubtypes` trait's `newFromBuilder()` method reads the discriminator column, resolves the type label, and maps it to a subtype class via `$subtypeMap`. With a lookup table, the integer type ID is resolved to a label via a cached query. In direct discriminator mode (no lookup table), the column value is used as the label directly — no extra query needed. The returned model is an instance of the subtype class with all parent attributes set.
 
 ### Batch Loading
 
