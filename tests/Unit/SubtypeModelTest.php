@@ -1856,6 +1856,79 @@ class SubtypeModelTest extends TestCase
     }
 
     /**
+     * Test that parent relationships are accessible from subtype instances as
+     * dynamic properties (e.g. $quiz->tags), not just as method calls.
+     */
+    public function testParentRelationshipAccessibleFromSubtypeAsDynamicProperty(): void
+    {
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'Quiz with tags', 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 85]
+        );
+
+        DB::table('assessment_tag')->insert([
+            ['assessment_id' => 1, 'tag_name' => 'math'],
+            ['assessment_id' => 1, 'tag_name' => 'algebra'],
+        ]);
+
+        $quiz = Quiz::find(1);
+        $this->assertNotNull($quiz);
+
+        // Access parent relationship as dynamic property
+        $tags = $quiz->tags;
+
+        $this->assertNotNull($tags);
+        $this->assertCount(2, $tags);
+        $this->assertEquals('math', $tags[0]->tag_name);
+        $this->assertEquals('algebra', $tags[1]->tag_name);
+
+        // Subsequent accesses should return the cached/loaded relation
+        $this->assertTrue($quiz->relationLoaded('tags'));
+        $this->assertSame($tags, $quiz->tags);
+    }
+
+    /**
+     * Test that parent relationships are eager-loadable from subtype instances.
+     */
+    public function testParentRelationshipEagerLoadableFromSubtype(): void
+    {
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'Quiz with tags', 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 85]
+        );
+
+        DB::table('assessment_tag')->insert([
+            ['assessment_id' => 1, 'tag_name' => 'math'],
+            ['assessment_id' => 1, 'tag_name' => 'algebra'],
+        ]);
+
+        $quiz = Quiz::with('tags')->find(1);
+
+        $this->assertTrue($quiz->relationLoaded('tags'));
+        $this->assertCount(2, $quiz->tags);
+    }
+
+    /**
+     * Accessing a CTI infrastructure helper as a dynamic property must not be
+     * mistaken for a relationship. Pre-fix this returned null, so the override
+     * must preserve that behavior — not throw Eloquent's relationship LogicException.
+     */
+    public function testCtiInfrastructureMethodNotTreatedAsRelation(): void
+    {
+        $this->createQuizRecord(
+            ['id' => 1, 'title' => 'Quiz', 'type_id' => 1],
+            ['assessment_id' => 1, 'passing_score' => 85]
+        );
+
+        $quiz = Quiz::find(1);
+
+        // getSubtypeKey is declared on the HasSubtypes trait used by Assessment.
+        // It returns a string, not a Relation, so treating it as a relation would
+        // throw a LogicException from Eloquent's getRelationshipFromMethod().
+        $this->assertNull($quiz->getSubtypeKey);
+    }
+
+    /**
      * Test that parent relationship queries work correctly.
      * Should be able to query parent relationships with where clauses, etc.
      */
