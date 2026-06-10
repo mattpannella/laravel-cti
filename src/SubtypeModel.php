@@ -736,6 +736,52 @@ abstract class SubtypeModel extends Model
     }
 
     /**
+     * Determine if the given key is a relationship method.
+     *
+     * Extends Eloquent's check so that relationship methods declared on the
+     * CTI parent class resolve as relations on the subtype. This makes
+     * dynamic property access (e.g. $quiz->tags) work alongside the existing
+     * method-call proxy in __call().
+     *
+     * @param string $key
+     * @return bool
+     */
+    public function isRelation($key)
+    {
+        // Subtype attribute mutator must win over a parent relation of the same name.
+        if ($this->hasAttributeMutator($key)) {
+            return false;
+        }
+
+        if (parent::isRelation($key)) {
+            return true;
+        }
+
+        $parentClass = $this->getCtiParentClass();
+        if (!$parentClass || !class_exists($parentClass)) {
+            return false;
+        }
+
+        if (!method_exists($parentClass, $key)) {
+            return false;
+        }
+
+        // Ignore methods inherited from Eloquent's base Model — they're not relations.
+        if (method_exists(Model::class, $key)) {
+            return false;
+        }
+
+        // Ignore methods provided by CTI traits used by the parent.
+        foreach (class_uses_recursive($parentClass) as $trait) {
+            if (str_starts_with($trait, 'Pannella\\Cti\\') && method_exists($trait, $key)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * Handle dynamic method calls to proxy parent model relationships.
      * If the method doesn't exist on this model but exists on the parent CTI class,
      * proxy the call to the parent model to access parent relationships.
