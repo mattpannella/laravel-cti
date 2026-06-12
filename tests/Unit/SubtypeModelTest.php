@@ -221,6 +221,32 @@ class SubtypeModelTest extends TestCase
     }
 
     /**
+     * Regression: a subtype created with no dirty subtype attributes (all columns
+     * left at their defaults) must still persist a subtype row, not just the parent.
+     */
+    public function testCreateSurveyWithPristineSubtypeAttributes(): void
+    {
+        $survey = new Survey();
+
+        // No subtype attributes are explicitly set — anonymous/allow_multiple_responses
+        // keep their defaults, so getDirty() yields no dirty subtype attributes.
+        $saved = $survey->save();
+
+        $this->assertTrue($saved);
+
+        $assessment = DB::table('assessment')->first();
+        $this->assertNotNull($assessment);
+        $this->assertEquals(2, $assessment->type_id);
+
+        $surveyData = DB::table('assessment_survey')
+            ->where('assessment_id', $assessment->id)
+            ->first();
+        $this->assertNotNull($surveyData, 'Subtype row should be created even when pristine');
+        $this->assertEquals(0, $surveyData->anonymous);
+        $this->assertEquals(0, $surveyData->allow_multiple_responses);
+    }
+
+    /**
      * Test creating a new quiz automatically sets the correct type_id
      */
     public function testCreateNewQuiz(): void
