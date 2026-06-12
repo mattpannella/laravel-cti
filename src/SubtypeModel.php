@@ -145,6 +145,9 @@ abstract class SubtypeModel extends Model
             $originalAttributesArray = $this->attributes;
             $dirtyAttributes = $this->getDirty();
 
+            //capture pre-save existence so we can force a subtype write on insert
+            $wasExisting = $this->exists;
+
             //split dirty attributes
             $dirtyParentAttributes = array_intersect_key(
                 $dirtyAttributes,
@@ -171,8 +174,9 @@ abstract class SubtypeModel extends Model
                     $postSaveParentAttributes
                 );
 
-                //save subtype data if we have any
-                if (!empty($dirtySubtypeAttributes)) {
+                //save subtype data if we have dirty subtype attributes,
+                //or always on insert so a subtype row exists even when pristine
+                if (!empty($dirtySubtypeAttributes) || !$wasExisting) {
                     $this->saveSubtypeData();
                 }
 
