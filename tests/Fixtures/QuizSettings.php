@@ -7,7 +7,9 @@ use Illuminate\Database\Eloquent\Model;
 class QuizSettings extends Model
 {
     protected $table = 'quiz_settings';
+
     protected $primaryKey = 'id';
+
     public $timestamps = false;
 
     protected $fillable = [

@@ -30,7 +30,7 @@ trait BootsSubtypeModel
     protected static function bootBootsSubtypeModel()
     {
         // Add global scope to filter by discriminator
-        static::addGlobalScope(new SubtypeDiscriminatorScope());
+        static::addGlobalScope(new SubtypeDiscriminatorScope);
 
         static::creating(function (SubtypeModel $model) {
             $modelClass = get_class($model); // E.g., YourApp\Models\Quiz
@@ -40,19 +40,20 @@ trait BootsSubtypeModel
                 return;
             }
 
-            if (!class_exists($ctiParentClass)) {
+            if (! class_exists($ctiParentClass)) {
                 return;
             }
 
             try {
-                $ctiParentClass = new $ctiParentClass();
+                $ctiParentClass = new $ctiParentClass;
                 $discriminatorColumn = $ctiParentClass->getSubtypeKey();
                 $discriminatorValue = $model->getAttribute($discriminatorColumn);
-                //only autoassign when unset. 0 and '0' are legitimate discriminator values
+                // only autoassign when unset. 0 and '0' are legitimate discriminator values
                 if ($discriminatorValue === null || $discriminatorValue === '') {
                     // Use cached type ID if available
                     if (isset(static::$creatingTypeIdCache[$modelClass])) {
                         $model->setAttribute($discriminatorColumn, static::$creatingTypeIdCache[$modelClass]);
+
                         return;
                     }
 
@@ -60,7 +61,7 @@ trait BootsSubtypeModel
                     $label = array_search($modelClass, $subtypeMap, true);
 
                     if ($label !== false) {
-                        if (!$ctiParentClass->usesLookupTable()) {
+                        if (! $ctiParentClass->usesLookupTable()) {
                             // Direct mode: use the label string as the discriminator value
                             static::$creatingTypeIdCache[$modelClass] = $label;
                             $model->setAttribute($discriminatorColumn, $label);
@@ -91,18 +92,16 @@ trait BootsSubtypeModel
     /**
      * Initialize the trait on each model instance.
      * Merges parent model's $fillable and $casts into the subtype model.
-     *
-     * @return void
      */
     public function initializeBootsSubtypeModel(): void
     {
         $parentClass = $this->getCtiParentClass();
-        if (empty($parentClass) || !class_exists($parentClass)) {
+        if (empty($parentClass) || ! class_exists($parentClass)) {
             return;
         }
 
-        if (!isset(static::$parentPropertyCache[static::class])) {
-            $parent = new $parentClass();
+        if (! isset(static::$parentPropertyCache[static::class])) {
+            $parent = new $parentClass;
             static::$parentPropertyCache[static::class] = [
                 'fillable' => $parent->getFillable(),
                 'casts' => $parent->getCasts(),
@@ -126,8 +125,6 @@ trait BootsSubtypeModel
     /**
      * Clear the creating type ID cache.
      * Useful for testing or when type definitions change at runtime.
-     *
-     * @return void
      */
     public static function clearTypeIdCache(): void
     {

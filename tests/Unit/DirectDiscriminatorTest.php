@@ -2,35 +2,37 @@
 
 namespace Pannella\Cti\Tests\Unit;
 
-use PHPUnit\Framework\TestCase;
+use Illuminate\Config\Repository as ConfigRepository;
+use Illuminate\Container\Container;
 use Illuminate\Database\Capsule\Manager as DB;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Events\Dispatcher;
-use Illuminate\Container\Container;
+use Illuminate\Support\Carbon;
+use Pannella\Cti\Exceptions\SubtypeException;
+use Pannella\Cti\SubtypeModel;
+use Pannella\Cti\Support\SubtypedCollection;
+use Pannella\Cti\Support\SubtypeDiscriminatorScope;
 use Pannella\Cti\Tests\Fixtures\Assessment;
-use Pannella\Cti\Tests\Fixtures\DirectAssessment;
-use Pannella\Cti\Tests\Fixtures\DirectQuiz;
-use Pannella\Cti\Tests\Fixtures\DirectSurvey;
-use Pannella\Cti\Tests\Fixtures\DirectSoftDeletableQuiz;
-use Pannella\Cti\Tests\Fixtures\DirectOverlappingColumnsQuiz;
-use Pannella\Cti\Tests\Fixtures\DirectMinimalQuiz;
-use Pannella\Cti\Tests\Fixtures\DirectNoInheritQuiz;
-use Pannella\Cti\Tests\Fixtures\DirectExcludeFieldQuiz;
-use Pannella\Cti\Tests\Fixtures\DirectQuizQuestion;
-use Pannella\Cti\Tests\Fixtures\DirectQuizSettings;
-use Pannella\Cti\Tests\Fixtures\DirectAssessmentTag;
 use Pannella\Cti\Tests\Fixtures\AttributeDirectAssessment;
 use Pannella\Cti\Tests\Fixtures\AttributeDirectQuiz;
 use Pannella\Cti\Tests\Fixtures\AttributeDirectSurvey;
-use Pannella\Cti\Exceptions\SubtypeException;
-use Pannella\Cti\Support\SubtypeDiscriminatorScope;
-use Pannella\Cti\SubtypeModel;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Config\Repository as ConfigRepository;
+use Pannella\Cti\Tests\Fixtures\DirectAssessment;
+use Pannella\Cti\Tests\Fixtures\DirectExcludeFieldQuiz;
+use Pannella\Cti\Tests\Fixtures\DirectMinimalQuiz;
+use Pannella\Cti\Tests\Fixtures\DirectNoInheritQuiz;
+use Pannella\Cti\Tests\Fixtures\DirectOverlappingColumnsQuiz;
+use Pannella\Cti\Tests\Fixtures\DirectQuiz;
+use Pannella\Cti\Tests\Fixtures\DirectQuizQuestion;
+use Pannella\Cti\Tests\Fixtures\DirectQuizSettings;
+use Pannella\Cti\Tests\Fixtures\DirectSoftDeletableQuiz;
+use Pannella\Cti\Tests\Fixtures\DirectSurvey;
+use PHPUnit\Framework\TestCase;
 
 class DirectDiscriminatorTest extends TestCase
 {
     protected $db;
+
     protected $dispatcher;
 
     protected function setUp(): void
@@ -228,21 +230,21 @@ class DirectDiscriminatorTest extends TestCase
     // usesLookupTable()
     // ============================================================
 
-    public function testUsesLookupTableReturnsFalseForDirectMode(): void
+    public function test_uses_lookup_table_returns_false_for_direct_mode(): void
     {
-        $model = new DirectAssessment();
+        $model = new DirectAssessment;
         $this->assertFalse($model->usesLookupTable());
     }
 
-    public function testUsesLookupTableReturnsFalseForAttributeDirectMode(): void
+    public function test_uses_lookup_table_returns_false_for_attribute_direct_mode(): void
     {
-        $model = new AttributeDirectAssessment();
+        $model = new AttributeDirectAssessment;
         $this->assertFalse($model->usesLookupTable());
     }
 
-    public function testUsesLookupTableReturnsTrueForLookupMode(): void
+    public function test_uses_lookup_table_returns_true_for_lookup_mode(): void
     {
-        $model = new Assessment();
+        $model = new Assessment;
         $this->assertTrue($model->usesLookupTable());
     }
 
@@ -250,33 +252,33 @@ class DirectDiscriminatorTest extends TestCase
     // Getter methods
     // ============================================================
 
-    public function testGetSubtypeLookupTableReturnsNullForDirectMode(): void
+    public function test_get_subtype_lookup_table_returns_null_for_direct_mode(): void
     {
-        $model = new DirectAssessment();
+        $model = new DirectAssessment;
         $this->assertNull($model->getSubtypeLookupTable());
     }
 
-    public function testGetSubtypeLookupKeyReturnsNullForDirectMode(): void
+    public function test_get_subtype_lookup_key_returns_null_for_direct_mode(): void
     {
-        $model = new DirectAssessment();
+        $model = new DirectAssessment;
         $this->assertNull($model->getSubtypeLookupKey());
     }
 
-    public function testGetSubtypeLookupLabelReturnsNullForDirectMode(): void
+    public function test_get_subtype_lookup_label_returns_null_for_direct_mode(): void
     {
-        $model = new DirectAssessment();
+        $model = new DirectAssessment;
         $this->assertNull($model->getSubtypeLookupLabel());
     }
 
-    public function testGetSubtypeKeyReturnsColumnName(): void
+    public function test_get_subtype_key_returns_column_name(): void
     {
-        $model = new DirectAssessment();
+        $model = new DirectAssessment;
         $this->assertEquals('type', $model->getSubtypeKey());
     }
 
-    public function testGetSubtypeMap(): void
+    public function test_get_subtype_map(): void
     {
-        $model = new DirectAssessment();
+        $model = new DirectAssessment;
         $map = $model->getSubtypeMap();
 
         $this->assertIsArray($map);
@@ -290,19 +292,19 @@ class DirectDiscriminatorTest extends TestCase
     // resolveSubtypeLabel
     // ============================================================
 
-    public function testResolveSubtypeLabelDirectMode(): void
+    public function test_resolve_subtype_label_direct_mode(): void
     {
         $label = DirectAssessment::resolveSubtypeLabel('quiz');
         $this->assertEquals('quiz', $label);
     }
 
-    public function testResolveSubtypeLabelDirectModeReturnsStringAsIs(): void
+    public function test_resolve_subtype_label_direct_mode_returns_string_as_is(): void
     {
         $label = DirectAssessment::resolveSubtypeLabel('survey');
         $this->assertEquals('survey', $label);
     }
 
-    public function testResolveSubtypeLabelReturnsNullForEmptyInput(): void
+    public function test_resolve_subtype_label_returns_null_for_empty_input(): void
     {
         $label = DirectAssessment::resolveSubtypeLabel('');
         $this->assertNull($label);
@@ -312,9 +314,9 @@ class DirectDiscriminatorTest extends TestCase
     // Creating models
     // ============================================================
 
-    public function testCreateSubtypeSetsDiscriminatorToLabel(): void
+    public function test_create_subtype_sets_discriminator_to_label(): void
     {
-        $quiz = new DirectQuiz();
+        $quiz = new DirectQuiz;
         $quiz->title = 'Test Quiz';
         $quiz->passing_score = 80;
         $quiz->save();
@@ -325,9 +327,9 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals('quiz', $record->type);
     }
 
-    public function testCreateSurveyDirectMode(): void
+    public function test_create_survey_direct_mode(): void
     {
-        $survey = new DirectSurvey();
+        $survey = new DirectSurvey;
         $survey->title = 'Test Survey';
         $survey->anonymous = true;
         $survey->save();
@@ -338,9 +340,9 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals('survey', $record->type);
     }
 
-    public function testCreateWithOnlySubtypeAttributes(): void
+    public function test_create_with_only_subtype_attributes(): void
     {
-        $quiz = new DirectQuiz();
+        $quiz = new DirectQuiz;
         $quiz->passing_score = 80;
         $quiz->time_limit = 60;
 
@@ -358,9 +360,9 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals($assessment->id, $quizData->assessment_id);
     }
 
-    public function testPresetDiscriminatorNotOverridden(): void
+    public function test_preset_discriminator_not_overridden(): void
     {
-        $quiz = new DirectQuiz();
+        $quiz = new DirectQuiz;
         $quiz->type = 'quiz';
         $quiz->title = 'Manually Typed Quiz';
         $quiz->passing_score = 70;
@@ -371,7 +373,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals('quiz', $assessment->type);
     }
 
-    public function testMassAssignmentCreateDirectMode(): void
+    public function test_mass_assignment_create_direct_mode(): void
     {
         $quiz = DirectQuiz::create([
             'title' => 'Created Quiz',
@@ -385,16 +387,16 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals(30, $quiz->time_limit);
     }
 
-    public function testCreatingTypeIdCacheWorksForDirectMode(): void
+    public function test_creating_type_id_cache_works_for_direct_mode(): void
     {
         // First create should resolve and cache
-        $quiz1 = new DirectQuiz();
+        $quiz1 = new DirectQuiz;
         $quiz1->title = 'Quiz 1';
         $quiz1->passing_score = 70;
         $quiz1->save();
 
         // Second create should use cache
-        $quiz2 = new DirectQuiz();
+        $quiz2 = new DirectQuiz;
         $quiz2->title = 'Quiz 2';
         $quiz2->passing_score = 80;
         $quiz2->save();
@@ -407,7 +409,7 @@ class DirectDiscriminatorTest extends TestCase
     // Loading models
     // ============================================================
 
-    public function testParentModelMorphsToCorrectSubtype(): void
+    public function test_parent_model_morphs_to_correct_subtype(): void
     {
         $this->seedQuizAndSurvey();
 
@@ -418,7 +420,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertInstanceOf(DirectSurvey::class, $assessments[1]);
     }
 
-    public function testSubtypeDataLoadsCorrectly(): void
+    public function test_subtype_data_loads_correctly(): void
     {
         $this->seedQuizAndSurvey();
 
@@ -429,7 +431,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals(60, $quiz->time_limit);
     }
 
-    public function testSurveySubtypeDataLoadsCorrectly(): void
+    public function test_survey_subtype_data_loads_correctly(): void
     {
         $this->seedQuizAndSurvey();
 
@@ -440,7 +442,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals(false, $survey->allow_multiple_responses);
     }
 
-    public function testParentModelFindMorphsToSubtype(): void
+    public function test_parent_model_find_morphs_to_subtype(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Test Quiz'],
@@ -454,7 +456,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals(80, $assessment->passing_score);
     }
 
-    public function testInvalidTypeReturnsBaseAssessment(): void
+    public function test_invalid_type_returns_base_assessment(): void
     {
         $now = date('Y-m-d H:i:s');
         DB::table('direct_assessment')->insert([
@@ -473,9 +475,9 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals('Invalid Assessment', $assessment->title);
     }
 
-    public function testNullValues(): void
+    public function test_null_values(): void
     {
-        $quiz = new DirectQuiz();
+        $quiz = new DirectQuiz;
         $quiz->title = 'Test Quiz';
         $quiz->description = null;
         $quiz->time_limit = null;
@@ -492,7 +494,7 @@ class DirectDiscriminatorTest extends TestCase
     // Query scoping
     // ============================================================
 
-    public function testSubtypeQueryScopeFiltersCorrectly(): void
+    public function test_subtype_query_scope_filters_correctly(): void
     {
         $this->seedQuizAndSurvey();
 
@@ -502,7 +504,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals('Math Quiz', $quizzes->first()->title);
     }
 
-    public function testSurveyQueryScopeFiltersCorrectly(): void
+    public function test_survey_query_scope_filters_correctly(): void
     {
         $this->seedQuizAndSurvey();
 
@@ -512,7 +514,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals('Feedback Survey', $surveys->first()->title);
     }
 
-    public function testWithoutGlobalScopeReturnsAllRecords(): void
+    public function test_without_global_scope_returns_all_records(): void
     {
         $this->seedQuizAndSurvey();
 
@@ -520,7 +522,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertCount(2, $all);
     }
 
-    public function testDiscriminatorFilteringWorksWithOtherClauses(): void
+    public function test_discriminator_filtering_works_with_other_clauses(): void
     {
         $this->createQuizRecord(['id' => 1, 'title' => 'Alpha Quiz'], ['assessment_id' => 1, 'passing_score' => 80]);
         $this->createQuizRecord(['id' => 2, 'title' => 'Beta Quiz'], ['assessment_id' => 2, 'passing_score' => 90]);
@@ -531,7 +533,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals('Alpha Quiz', $result->first()->title);
     }
 
-    public function testDiscriminatorFilteringWorksWithCount(): void
+    public function test_discriminator_filtering_works_with_count(): void
     {
         $this->createQuizRecord(['id' => 1], ['assessment_id' => 1, 'passing_score' => 80]);
         $this->createQuizRecord(['id' => 2], ['assessment_id' => 2, 'passing_score' => 90]);
@@ -541,7 +543,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals(1, DirectSurvey::count());
     }
 
-    public function testFindRespectsDiscriminatorFiltering(): void
+    public function test_find_respects_discriminator_filtering(): void
     {
         $this->createSurveyRecord(['id' => 1], ['assessment_id' => 1]);
 
@@ -554,7 +556,7 @@ class DirectDiscriminatorTest extends TestCase
     // Find and Update
     // ============================================================
 
-    public function testFindLoadsSubtypeData(): void
+    public function test_find_loads_subtype_data(): void
     {
         $this->seedQuizAndSurvey();
 
@@ -564,7 +566,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals(80, $quiz->passing_score);
     }
 
-    public function testUpdateSubtypeAttributes(): void
+    public function test_update_subtype_attributes(): void
     {
         $this->seedQuizAndSurvey();
 
@@ -576,7 +578,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals(90, $record->passing_score);
     }
 
-    public function testSaveWithOnlySubtypeAttributesModified(): void
+    public function test_save_with_only_subtype_attributes_modified(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Original Title'],
@@ -596,7 +598,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals(85, $quizRecord->passing_score);
     }
 
-    public function testSaveWithOnlyParentAttributesModified(): void
+    public function test_save_with_only_parent_attributes_modified(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Original Title'],
@@ -616,7 +618,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals(70, $quizRecord->passing_score);
     }
 
-    public function testSaveWithNoChanges(): void
+    public function test_save_with_no_changes(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Test Quiz'],
@@ -631,8 +633,7 @@ class DirectDiscriminatorTest extends TestCase
 
         $this->assertTrue($result);
 
-        $subtypeUpdates = array_filter($queryLog, fn ($q) =>
-            strpos($q['query'], 'update') !== false
+        $subtypeUpdates = array_filter($queryLog, fn ($q) => strpos($q['query'], 'update') !== false
             && strpos($q['query'], 'direct_assessment_quiz') !== false
         );
         $this->assertCount(0, $subtypeUpdates);
@@ -642,7 +643,7 @@ class DirectDiscriminatorTest extends TestCase
     // Delete
     // ============================================================
 
-    public function testDeleteRemovesBothRecords(): void
+    public function test_delete_removes_both_records(): void
     {
         $this->seedQuizAndSurvey();
 
@@ -653,7 +654,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertNull(DB::table('direct_assessment_quiz')->where('assessment_id', 1)->first());
     }
 
-    public function testDeleteModelWithNoSubtypeRecord(): void
+    public function test_delete_model_with_no_subtype_record(): void
     {
         $now = date('Y-m-d H:i:s');
         DB::table('direct_assessment')->insert([
@@ -678,7 +679,7 @@ class DirectDiscriminatorTest extends TestCase
     // Soft Deletes
     // ============================================================
 
-    public function testSoftDeletePreservesSubtypeRow(): void
+    public function test_soft_delete_preserves_subtype_row(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Soft Delete Quiz'],
@@ -700,7 +701,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertNotNull(DB::table('direct_assessment_quiz')->where('assessment_id', 1)->first());
     }
 
-    public function testForceDeleteRemovesSubtypeRow(): void
+    public function test_force_delete_removes_subtype_row(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Force Delete Quiz'],
@@ -716,7 +717,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertNull(DB::table('direct_assessment_quiz')->where('assessment_id', 1)->first());
     }
 
-    public function testRestoreAfterSoftDelete(): void
+    public function test_restore_after_soft_delete(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Restore Quiz'],
@@ -744,7 +745,7 @@ class DirectDiscriminatorTest extends TestCase
     // Query Builder — WHERE variants
     // ============================================================
 
-    public function testQueryBuilderWithSubtypeConditions(): void
+    public function test_query_builder_with_subtype_conditions(): void
     {
         $this->createQuizRecord(['id' => 1], ['assessment_id' => 1, 'passing_score' => 70]);
         $this->createQuizRecord(['id' => 2], ['assessment_id' => 2, 'passing_score' => 80]);
@@ -756,7 +757,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals([80, 90], $highScoreQuizzes->pluck('passing_score')->all());
     }
 
-    public function testWhereInWithSubtypeColumn(): void
+    public function test_where_in_with_subtype_column(): void
     {
         $this->createQuizRecord(['id' => 1], ['assessment_id' => 1, 'passing_score' => 70]);
         $this->createQuizRecord(['id' => 2], ['assessment_id' => 2, 'passing_score' => 80]);
@@ -769,7 +770,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals([70, 90], $scores);
     }
 
-    public function testWhereNotInWithSubtypeColumn(): void
+    public function test_where_not_in_with_subtype_column(): void
     {
         $this->createQuizRecord(['id' => 1], ['assessment_id' => 1, 'passing_score' => 70]);
         $this->createQuizRecord(['id' => 2], ['assessment_id' => 2, 'passing_score' => 80]);
@@ -781,7 +782,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals(80, $result->first()->passing_score);
     }
 
-    public function testWhereBetweenWithSubtypeColumn(): void
+    public function test_where_between_with_subtype_column(): void
     {
         $this->createQuizRecord(['id' => 1], ['assessment_id' => 1, 'passing_score' => 60]);
         $this->createQuizRecord(['id' => 2], ['assessment_id' => 2, 'passing_score' => 75]);
@@ -793,7 +794,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals(75, $result->first()->passing_score);
     }
 
-    public function testWhereNullWithSubtypeColumn(): void
+    public function test_where_null_with_subtype_column(): void
     {
         $this->createQuizRecord(['id' => 1], ['assessment_id' => 1, 'passing_score' => 80, 'time_limit' => 60]);
         $this->createQuizRecord(['id' => 2], ['assessment_id' => 2, 'passing_score' => 90, 'time_limit' => null]);
@@ -804,7 +805,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals(2, $result->first()->id);
     }
 
-    public function testWhereNotNullWithSubtypeColumn(): void
+    public function test_where_not_null_with_subtype_column(): void
     {
         $this->createQuizRecord(['id' => 1], ['assessment_id' => 1, 'passing_score' => 80, 'time_limit' => 60]);
         $this->createQuizRecord(['id' => 2], ['assessment_id' => 2, 'passing_score' => 90, 'time_limit' => null]);
@@ -815,7 +816,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals(1, $result->first()->id);
     }
 
-    public function testWhereColumnWithSubtypeColumn(): void
+    public function test_where_column_with_subtype_column(): void
     {
         $this->createQuizRecord(['id' => 1], ['assessment_id' => 1, 'passing_score' => 80, 'time_limit' => 80]);
         $this->createQuizRecord(['id' => 2], ['assessment_id' => 2, 'passing_score' => 90, 'time_limit' => 60]);
@@ -826,7 +827,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals(1, $result->first()->id);
     }
 
-    public function testChainedQueryBuilderAddsJoinOnce(): void
+    public function test_chained_query_builder_adds_join_once(): void
     {
         $this->createQuizRecord(['id' => 1], ['assessment_id' => 1, 'passing_score' => 80, 'time_limit' => 60]);
         $this->createQuizRecord(['id' => 2], ['assessment_id' => 2, 'passing_score' => 90, 'time_limit' => 30]);
@@ -845,7 +846,7 @@ class DirectDiscriminatorTest extends TestCase
     // Query Builder — ORDER BY, GROUP BY, HAVING
     // ============================================================
 
-    public function testOrderByWithSubtypeColumn(): void
+    public function test_order_by_with_subtype_column(): void
     {
         $this->createQuizRecord(['id' => 1], ['assessment_id' => 1, 'passing_score' => 90]);
         $this->createQuizRecord(['id' => 2], ['assessment_id' => 2, 'passing_score' => 70]);
@@ -857,7 +858,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals([70, 80, 90], $quizzes->pluck('passing_score')->all());
     }
 
-    public function testOrderByDescWithSubtypeColumn(): void
+    public function test_order_by_desc_with_subtype_column(): void
     {
         $this->createQuizRecord(['id' => 1], ['assessment_id' => 1, 'passing_score' => 90]);
         $this->createQuizRecord(['id' => 2], ['assessment_id' => 2, 'passing_score' => 70]);
@@ -869,7 +870,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals([90, 80, 70], $quizzes->pluck('passing_score')->all());
     }
 
-    public function testGroupByWithSubtypeColumn(): void
+    public function test_group_by_with_subtype_column(): void
     {
         $this->createQuizRecord(['id' => 1], ['assessment_id' => 1, 'passing_score' => 80]);
         $this->createQuizRecord(['id' => 2], ['assessment_id' => 2, 'passing_score' => 80]);
@@ -887,7 +888,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals(1, $grouped[1]->count);
     }
 
-    public function testHavingWithSubtypeColumn(): void
+    public function test_having_with_subtype_column(): void
     {
         $this->createQuizRecord(['id' => 1], ['assessment_id' => 1, 'passing_score' => 80]);
         $this->createQuizRecord(['id' => 2], ['assessment_id' => 2, 'passing_score' => 80]);
@@ -906,7 +907,7 @@ class DirectDiscriminatorTest extends TestCase
     // Query Builder — Aggregates
     // ============================================================
 
-    public function testAggregateCountWithSubtypeColumn(): void
+    public function test_aggregate_count_with_subtype_column(): void
     {
         $this->createQuizRecord(['id' => 1], ['assessment_id' => 1, 'passing_score' => 80]);
         $this->createQuizRecord(['id' => 2], ['assessment_id' => 2, 'passing_score' => 90]);
@@ -917,7 +918,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals(2, $count);
     }
 
-    public function testAggregateSumWithSubtypeColumn(): void
+    public function test_aggregate_sum_with_subtype_column(): void
     {
         $this->createQuizRecord(['id' => 1], ['assessment_id' => 1, 'passing_score' => 80]);
         $this->createQuizRecord(['id' => 2], ['assessment_id' => 2, 'passing_score' => 90]);
@@ -928,7 +929,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals(240, $sum);
     }
 
-    public function testAggregateAvgWithSubtypeColumn(): void
+    public function test_aggregate_avg_with_subtype_column(): void
     {
         $this->createQuizRecord(['id' => 1], ['assessment_id' => 1, 'passing_score' => 80]);
         $this->createQuizRecord(['id' => 2], ['assessment_id' => 2, 'passing_score' => 90]);
@@ -939,7 +940,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals(80, $avg);
     }
 
-    public function testAggregateMaxWithSubtypeColumn(): void
+    public function test_aggregate_max_with_subtype_column(): void
     {
         $this->createQuizRecord(['id' => 1], ['assessment_id' => 1, 'passing_score' => 80]);
         $this->createQuizRecord(['id' => 2], ['assessment_id' => 2, 'passing_score' => 90]);
@@ -950,7 +951,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals(90, $max);
     }
 
-    public function testAggregateMinWithSubtypeColumn(): void
+    public function test_aggregate_min_with_subtype_column(): void
     {
         $this->createQuizRecord(['id' => 1], ['assessment_id' => 1, 'passing_score' => 80]);
         $this->createQuizRecord(['id' => 2], ['assessment_id' => 2, 'passing_score' => 90]);
@@ -965,7 +966,7 @@ class DirectDiscriminatorTest extends TestCase
     // Query Builder — Select, Pluck, Value
     // ============================================================
 
-    public function testSelectWithSubtypeColumns(): void
+    public function test_select_with_subtype_columns(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Test Quiz'],
@@ -977,7 +978,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals(80, $quiz->passing_score);
     }
 
-    public function testPluckOnSubtypeColumn(): void
+    public function test_pluck_on_subtype_column(): void
     {
         $this->createQuizRecord(['id' => 1], ['assessment_id' => 1, 'passing_score' => 70]);
         $this->createQuizRecord(['id' => 2], ['assessment_id' => 2, 'passing_score' => 80]);
@@ -992,7 +993,7 @@ class DirectDiscriminatorTest extends TestCase
     // Query Builder — Mass Update, Increment, Decrement
     // ============================================================
 
-    public function testMassUpdateSubtypeColumns(): void
+    public function test_mass_update_subtype_columns(): void
     {
         $this->createQuizRecord(['id' => 1], ['assessment_id' => 1, 'passing_score' => 70]);
         $this->createQuizRecord(['id' => 2], ['assessment_id' => 2, 'passing_score' => 80]);
@@ -1007,7 +1008,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals(80, $record2->passing_score);
     }
 
-    public function testIncrementSubtypeColumn(): void
+    public function test_increment_subtype_column(): void
     {
         $this->createQuizRecord(['id' => 1], ['assessment_id' => 1, 'passing_score' => 70]);
         $this->createQuizRecord(['id' => 2], ['assessment_id' => 2, 'passing_score' => 80]);
@@ -1018,7 +1019,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals(85, DB::table('direct_assessment_quiz')->where('assessment_id', 2)->first()->passing_score);
     }
 
-    public function testDecrementSubtypeColumn(): void
+    public function test_decrement_subtype_column(): void
     {
         $this->createQuizRecord(['id' => 1], ['assessment_id' => 1, 'passing_score' => 70]);
         $this->createQuizRecord(['id' => 2], ['assessment_id' => 2, 'passing_score' => 80]);
@@ -1033,7 +1034,7 @@ class DirectDiscriminatorTest extends TestCase
     // Relationships
     // ============================================================
 
-    public function testSubtypeHasManyRelationship(): void
+    public function test_subtype_has_many_relationship(): void
     {
         $this->createQuizRecord(['id' => 1, 'title' => 'Test Quiz'], ['assessment_id' => 1, 'passing_score' => 80]);
 
@@ -1050,7 +1051,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals('Question 2', $questions[1]->question_text);
     }
 
-    public function testSubtypeHasManyWithFiltering(): void
+    public function test_subtype_has_many_with_filtering(): void
     {
         $this->createQuizRecord(['id' => 1, 'title' => 'Test Quiz'], ['assessment_id' => 1, 'passing_score' => 80]);
 
@@ -1066,7 +1067,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals('Hard Question', $hardQuestions[0]->question_text);
     }
 
-    public function testSubtypeHasManyCreate(): void
+    public function test_subtype_has_many_create(): void
     {
         $this->createQuizRecord(['id' => 1, 'title' => 'Test Quiz'], ['assessment_id' => 1, 'passing_score' => 80]);
 
@@ -1082,7 +1083,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals(1, DB::table('direct_quiz_questions')->where('assessment_id', 1)->count());
     }
 
-    public function testSubtypeHasManyCount(): void
+    public function test_subtype_has_many_count(): void
     {
         $this->createQuizRecord(['id' => 1, 'title' => 'Test Quiz'], ['assessment_id' => 1, 'passing_score' => 80]);
 
@@ -1096,7 +1097,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals(3, $quiz->questions()->count());
     }
 
-    public function testSubtypeHasOneRelationship(): void
+    public function test_subtype_has_one_relationship(): void
     {
         $this->createQuizRecord(['id' => 1, 'title' => 'Test Quiz'], ['assessment_id' => 1, 'passing_score' => 80]);
 
@@ -1115,7 +1116,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals(0, $settings->show_progress_bar);
     }
 
-    public function testSubtypeHasOneReturnsNullWhenNoRelated(): void
+    public function test_subtype_has_one_returns_null_when_no_related(): void
     {
         $this->createQuizRecord(['id' => 1, 'title' => 'Test Quiz'], ['assessment_id' => 1, 'passing_score' => 80]);
 
@@ -1123,7 +1124,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertNull($quiz->settings);
     }
 
-    public function testParentRelationshipAccessibleFromSubtype(): void
+    public function test_parent_relationship_accessible_from_subtype(): void
     {
         $this->createQuizRecord(['id' => 1, 'title' => 'Quiz with tags'], ['assessment_id' => 1, 'passing_score' => 85]);
 
@@ -1140,7 +1141,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals('algebra', $tags[1]->tag_name);
     }
 
-    public function testParentRelationshipQueryWorks(): void
+    public function test_parent_relationship_query_works(): void
     {
         $this->createQuizRecord(['id' => 1, 'title' => 'Quiz with tags'], ['assessment_id' => 1, 'passing_score' => 85]);
 
@@ -1157,7 +1158,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals('math', $mathTags[0]->tag_name);
     }
 
-    public function testSubtypeRelationshipTakesPrecedence(): void
+    public function test_subtype_relationship_takes_precedence(): void
     {
         $this->createQuizRecord(['id' => 1, 'title' => 'My Quiz'], ['assessment_id' => 1, 'passing_score' => 80]);
 
@@ -1173,7 +1174,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertInstanceOf(DirectQuizQuestion::class, $questions[0]);
     }
 
-    public function testUndefinedMethodThrowsException(): void
+    public function test_undefined_method_throws_exception(): void
     {
         $this->createQuizRecord(['id' => 1], ['assessment_id' => 1, 'passing_score' => 80]);
 
@@ -1187,7 +1188,7 @@ class DirectDiscriminatorTest extends TestCase
     // Events
     // ============================================================
 
-    public function testSubtypeEvents(): void
+    public function test_subtype_events(): void
     {
         $events = [];
 
@@ -1199,7 +1200,7 @@ class DirectDiscriminatorTest extends TestCase
             $events[] = 'subtypeSaved';
         });
 
-        $quiz = new DirectQuiz();
+        $quiz = new DirectQuiz;
         $quiz->title = 'Test Quiz';
         $quiz->passing_score = 70;
         $quiz->time_limit = 60;
@@ -1209,16 +1210,17 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertContains('subtypeSaved', $events);
     }
 
-    public function testSubtypeSavingEventCanHalt(): void
+    public function test_subtype_saving_event_can_halt(): void
     {
         $eventFired = false;
 
         DirectQuiz::subtypeSaving(function ($quiz) use (&$eventFired) {
             $eventFired = true;
+
             return false;
         });
 
-        $quiz = new DirectQuiz();
+        $quiz = new DirectQuiz;
         $quiz->title = 'Test Quiz';
         $quiz->passing_score = 70;
 
@@ -1229,16 +1231,17 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertNull($quiz->id);
     }
 
-    public function testSubtypeSavingEventAllowsSave(): void
+    public function test_subtype_saving_event_allows_save(): void
     {
         $eventFired = false;
 
         DirectQuiz::subtypeSaving(function ($quiz) use (&$eventFired) {
             $eventFired = true;
+
             return true;
         });
 
-        $quiz = new DirectQuiz();
+        $quiz = new DirectQuiz;
         $quiz->title = 'Test Quiz';
         $quiz->passing_score = 70;
 
@@ -1249,7 +1252,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertNotNull($quiz->id);
     }
 
-    public function testSubtypeDeletingEventCanHalt(): void
+    public function test_subtype_deleting_event_can_halt(): void
     {
         $this->createQuizRecord(['id' => 1, 'title' => 'Test Quiz'], ['assessment_id' => 1, 'passing_score' => 80]);
 
@@ -1257,6 +1260,7 @@ class DirectDiscriminatorTest extends TestCase
 
         DirectQuiz::subtypeDeleting(function ($quiz) use (&$eventFired) {
             $eventFired = true;
+
             return false;
         });
 
@@ -1270,7 +1274,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertNotNull(DB::table('direct_assessment_quiz')->where('assessment_id', 1)->first());
     }
 
-    public function testSubtypeDeletingEventAllowsDelete(): void
+    public function test_subtype_deleting_event_allows_delete(): void
     {
         $this->createQuizRecord(['id' => 1, 'title' => 'Test Quiz'], ['assessment_id' => 1, 'passing_score' => 80]);
 
@@ -1278,6 +1282,7 @@ class DirectDiscriminatorTest extends TestCase
 
         DirectQuiz::subtypeDeleting(function ($quiz) use (&$eventFired) {
             $eventFired = true;
+
             return true;
         });
 
@@ -1291,7 +1296,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertNull(DB::table('direct_assessment_quiz')->where('assessment_id', 1)->first());
     }
 
-    public function testSubtypeDeletedEventFires(): void
+    public function test_subtype_deleted_event_fires(): void
     {
         $this->createQuizRecord(['id' => 1, 'title' => 'Test Quiz'], ['assessment_id' => 1, 'passing_score' => 80]);
 
@@ -1310,7 +1315,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals(1, $deletedQuizId);
     }
 
-    public function testSubtypeSavedEventFires(): void
+    public function test_subtype_saved_event_fires(): void
     {
         $eventFired = false;
         $savedQuiz = null;
@@ -1320,7 +1325,7 @@ class DirectDiscriminatorTest extends TestCase
             $savedQuiz = $quiz;
         });
 
-        $quiz = new DirectQuiz();
+        $quiz = new DirectQuiz;
         $quiz->title = 'Test Quiz';
         $quiz->passing_score = 70;
         $quiz->save();
@@ -1331,7 +1336,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals(70, $savedQuiz->passing_score);
     }
 
-    public function testSubtypeSavingEventReceivesCorrectData(): void
+    public function test_subtype_saving_event_receives_correct_data(): void
     {
         $receivedQuiz = null;
 
@@ -1339,7 +1344,7 @@ class DirectDiscriminatorTest extends TestCase
             $receivedQuiz = $quiz;
         });
 
-        $quiz = new DirectQuiz();
+        $quiz = new DirectQuiz;
         $quiz->title = 'Test Quiz';
         $quiz->passing_score = 85;
         $quiz->time_limit = 120;
@@ -1355,7 +1360,7 @@ class DirectDiscriminatorTest extends TestCase
     // Collection & Batch Loading
     // ============================================================
 
-    public function testCollectionBatchLoadsSubtypeData(): void
+    public function test_collection_batch_loads_subtype_data(): void
     {
         $this->seedQuizAndSurvey();
 
@@ -1379,7 +1384,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals(true, $survey->anonymous);
     }
 
-    public function testMixedTypeBatchLoadingEfficiency(): void
+    public function test_mixed_type_batch_loading_efficiency(): void
     {
         $this->createQuizRecord(['id' => 1, 'title' => 'Quiz 1'], ['assessment_id' => 1, 'passing_score' => 80]);
         $this->createQuizRecord(['id' => 2, 'title' => 'Quiz 2'], ['assessment_id' => 2, 'passing_score' => 90]);
@@ -1402,21 +1407,21 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertCount(1, $surveys);
     }
 
-    public function testSubtypedCollectionWithEmptyCollection(): void
+    public function test_subtyped_collection_with_empty_collection(): void
     {
-        $collection = new \Pannella\Cti\Support\SubtypedCollection([]);
+        $collection = new SubtypedCollection([]);
 
         $this->assertCount(0, $collection);
         $this->assertTrue($collection->isEmpty());
     }
 
-    public function testSubtypedCollectionWithModelsWithoutKeys(): void
+    public function test_subtyped_collection_with_models_without_keys(): void
     {
-        $model = new DirectQuiz();
+        $model = new DirectQuiz;
         $model->title = 'Unsaved Quiz';
         $model->passing_score = 70;
 
-        $collection = new \Pannella\Cti\Support\SubtypedCollection([$model]);
+        $collection = new SubtypedCollection([$model]);
 
         $this->assertCount(1, $collection);
         $this->assertNull($collection->first()->id);
@@ -1426,7 +1431,7 @@ class DirectDiscriminatorTest extends TestCase
     // Replicate and Refresh
     // ============================================================
 
-    public function testReplicateQuiz(): void
+    public function test_replicate_quiz(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Original Quiz'],
@@ -1443,7 +1448,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals($original->passing_score, $clone->passing_score);
     }
 
-    public function testReplicateWithExceptParameter(): void
+    public function test_replicate_with_except_parameter(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Original Quiz'],
@@ -1460,7 +1465,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertNull($clone->time_limit);
     }
 
-    public function testRefreshQuiz(): void
+    public function test_refresh_quiz(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Test Quiz'],
@@ -1482,7 +1487,7 @@ class DirectDiscriminatorTest extends TestCase
     // Serialization
     // ============================================================
 
-    public function testToArrayIncludesBothParentAndSubtypeAttributes(): void
+    public function test_to_array_includes_both_parent_and_subtype_attributes(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Array Test', 'description' => 'A description'],
@@ -1502,7 +1507,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals(60, $array['time_limit']);
     }
 
-    public function testToJsonIncludesBothParentAndSubtypeAttributes(): void
+    public function test_to_json_includes_both_parent_and_subtype_attributes(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'JSON Test'],
@@ -1523,7 +1528,7 @@ class DirectDiscriminatorTest extends TestCase
     // Casts
     // ============================================================
 
-    public function testParentCastsAppliedToMorphedInstances(): void
+    public function test_parent_casts_applied_to_morphed_instances(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Test Quiz', 'enabled' => 1],
@@ -1538,7 +1543,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertSame(true, $quiz->enabled);
     }
 
-    public function testParentCastsWithFalseValues(): void
+    public function test_parent_casts_with_false_values(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Test Quiz', 'enabled' => 0],
@@ -1553,7 +1558,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertSame(false, $quiz->enabled);
     }
 
-    public function testDirectQueryAppliesParentCasts(): void
+    public function test_direct_query_applies_parent_casts(): void
     {
         $timestamp = date('Y-m-d H:i:s');
 
@@ -1577,10 +1582,10 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertIsBool($quiz2->enabled);
         $this->assertTrue($quiz2->enabled);
 
-        $this->assertInstanceOf(\Illuminate\Support\Carbon::class, $quiz1->created_at);
+        $this->assertInstanceOf(Carbon::class, $quiz1->created_at);
     }
 
-    public function testSubtypeSpecificCasts(): void
+    public function test_subtype_specific_casts(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Cast Test'],
@@ -1600,9 +1605,9 @@ class DirectDiscriminatorTest extends TestCase
     // Fillable Inheritance
     // ============================================================
 
-    public function testMinimalSubtypeInheritsParentFillable(): void
+    public function test_minimal_subtype_inherits_parent_fillable(): void
     {
-        $quiz = new DirectMinimalQuiz();
+        $quiz = new DirectMinimalQuiz;
         $fillable = $quiz->getFillable();
 
         // Should have parent fillable merged in
@@ -1615,9 +1620,9 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertContains('time_limit', $fillable);
     }
 
-    public function testNoInheritQuizDisablesFillableMerge(): void
+    public function test_no_inherit_quiz_disables_fillable_merge(): void
     {
-        $quiz = new DirectNoInheritQuiz();
+        $quiz = new DirectNoInheritQuiz;
         $fillable = $quiz->getFillable();
 
         // Should NOT have parent fillable
@@ -1630,9 +1635,9 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertContains('time_limit', $fillable);
     }
 
-    public function testExcludeFieldQuizExcludesSpecificAttrs(): void
+    public function test_exclude_field_quiz_excludes_specific_attrs(): void
     {
-        $quiz = new DirectExcludeFieldQuiz();
+        $quiz = new DirectExcludeFieldQuiz;
         $fillable = $quiz->getFillable();
 
         // Should have most parent fillable
@@ -1648,9 +1653,9 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertContains('time_limit', $fillable);
     }
 
-    public function testNoInheritQuizStillGetsCastsFromParent(): void
+    public function test_no_inherit_quiz_still_gets_casts_from_parent(): void
     {
-        $quiz = new DirectNoInheritQuiz();
+        $quiz = new DirectNoInheritQuiz;
         $casts = $quiz->getCasts();
 
         // Parent cast for 'enabled' should still be inherited regardless of fillable setting
@@ -1658,7 +1663,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals('boolean', $casts['enabled']);
     }
 
-    public function testFillableProtection(): void
+    public function test_fillable_protection(): void
     {
         $data = [
             'title' => 'Test Quiz',
@@ -1666,7 +1671,7 @@ class DirectDiscriminatorTest extends TestCase
             'non_fillable_field' => 'should not be set',
         ];
 
-        $quiz = new DirectQuiz();
+        $quiz = new DirectQuiz;
         $quiz->fill($data);
 
         $this->assertEquals('Test Quiz', $quiz->title);
@@ -1678,9 +1683,9 @@ class DirectDiscriminatorTest extends TestCase
     // Pagination
     // ============================================================
 
-    public function testPaginationWithSubtypeData(): void
+    public function test_pagination_with_subtype_data(): void
     {
-        if (!class_exists('\Illuminate\Pagination\Paginator')) {
+        if (! class_exists('\Illuminate\Pagination\Paginator')) {
             $this->markTestSkipped('Pagination package not installed');
         }
 
@@ -1707,7 +1712,7 @@ class DirectDiscriminatorTest extends TestCase
     // Missing Subtype Data Strategies
     // ============================================================
 
-    public function testMissingSubtypeDataLogStrategySetsFlagOnLoad(): void
+    public function test_missing_subtype_data_log_strategy_sets_flag_on_load(): void
     {
         $this->setCtiConfig('log');
 
@@ -1729,7 +1734,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertTrue($quiz->isSubtypeDataMissing());
     }
 
-    public function testMissingSubtypeDataExceptionStrategyThrowsOnLoad(): void
+    public function test_missing_subtype_data_exception_strategy_throws_on_load(): void
     {
         $this->setCtiConfig('exception');
 
@@ -1747,7 +1752,7 @@ class DirectDiscriminatorTest extends TestCase
         DirectQuiz::find(1);
     }
 
-    public function testMissingSubtypeDataNullStrategySilent(): void
+    public function test_missing_subtype_data_null_strategy_silent(): void
     {
         $this->setCtiConfig('null');
 
@@ -1765,7 +1770,7 @@ class DirectDiscriminatorTest extends TestCase
 
         $this->assertNotNull($quiz);
         $this->assertNull($quiz->passing_score);
-        //the flag is set under every strategy; 'null' only suppresses logging/throwing
+        // the flag is set under every strategy; 'null' only suppresses logging/throwing
         $this->assertTrue($quiz->isSubtypeDataMissing());
     }
 
@@ -1773,7 +1778,7 @@ class DirectDiscriminatorTest extends TestCase
     // Falsy Discriminator Values
     // ============================================================
 
-    public function testResolveSubtypeLabelHandlesFalsyTypeIds(): void
+    public function test_resolve_subtype_label_handles_falsy_type_ids(): void
     {
         // '0' and 0 are legitimate discriminator values in direct mode
         $this->assertSame('0', DirectAssessment::resolveSubtypeLabel('0'));
@@ -1784,9 +1789,9 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertNull(DirectAssessment::resolveSubtypeLabel(''));
     }
 
-    public function testExplicitZeroDiscriminatorNotOverwrittenOnCreate(): void
+    public function test_explicit_zero_discriminator_not_overwritten_on_create(): void
     {
-        $quiz = new DirectQuiz();
+        $quiz = new DirectQuiz;
         $quiz->type = '0';
         $quiz->title = 'Zero Type';
         $quiz->passing_score = 10;
@@ -1799,12 +1804,12 @@ class DirectDiscriminatorTest extends TestCase
     // Overlapping Column Validation
     // ============================================================
 
-    public function testOverlappingColumnsThrowOnSave(): void
+    public function test_overlapping_columns_throw_on_save(): void
     {
         $this->expectException(SubtypeException::class);
         $this->expectExceptionMessage('overlap with parent table columns: title');
 
-        $model = new DirectOverlappingColumnsQuiz();
+        $model = new DirectOverlappingColumnsQuiz;
         $model->title = 'Test';
         $model->passing_score = 80;
         $model->save();
@@ -1814,9 +1819,9 @@ class DirectDiscriminatorTest extends TestCase
     // Dirty Attributes
     // ============================================================
 
-    public function testDirtyAttributesTracking(): void
+    public function test_dirty_attributes_tracking(): void
     {
-        $quiz = new DirectQuiz();
+        $quiz = new DirectQuiz;
 
         $quiz->title = 'Test Quiz';
         $quiz->passing_score = 70;
@@ -1840,9 +1845,9 @@ class DirectDiscriminatorTest extends TestCase
     // Primary Key and Timestamp Handling
     // ============================================================
 
-    public function testPrimaryKeyHandling(): void
+    public function test_primary_key_handling(): void
     {
-        $quiz = new DirectQuiz();
+        $quiz = new DirectQuiz;
         $quiz->title = 'Test Quiz';
         $quiz->passing_score = 70;
         $quiz->save();
@@ -1856,9 +1861,9 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertNotNull($subtypeRecord);
     }
 
-    public function testTimestampHandling(): void
+    public function test_timestamp_handling(): void
     {
-        $quiz = new DirectQuiz();
+        $quiz = new DirectQuiz;
         $quiz->title = 'Test Quiz';
         $quiz->passing_score = 70;
         $quiz->save();
@@ -1879,7 +1884,7 @@ class DirectDiscriminatorTest extends TestCase
     // Mixed Subtypes
     // ============================================================
 
-    public function testMixedSubtypesInDatabase(): void
+    public function test_mixed_subtypes_in_database(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'My Quiz'],
@@ -1919,7 +1924,7 @@ class DirectDiscriminatorTest extends TestCase
     // getSubtypeLabel
     // ============================================================
 
-    public function testGetSubtypeLabelDirectMode(): void
+    public function test_get_subtype_label_direct_mode(): void
     {
         $this->seedQuizAndSurvey();
 
@@ -1931,9 +1936,9 @@ class DirectDiscriminatorTest extends TestCase
     // Attribute-based config
     // ============================================================
 
-    public function testAttributeConfigDirectModeCreatesCorrectly(): void
+    public function test_attribute_config_direct_mode_creates_correctly(): void
     {
-        $quiz = new AttributeDirectQuiz();
+        $quiz = new AttributeDirectQuiz;
         $quiz->title = 'Attr Quiz';
         $quiz->passing_score = 75;
         $quiz->save();
@@ -1944,7 +1949,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals('quiz', $record->type);
     }
 
-    public function testAttributeConfigDirectModeLoadsCorrectly(): void
+    public function test_attribute_config_direct_mode_loads_correctly(): void
     {
         $this->seedQuizAndSurvey();
 
@@ -1954,7 +1959,7 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertInstanceOf(AttributeDirectSurvey::class, $assessments[1]);
     }
 
-    public function testAttributeConfigDirectModeQueryScope(): void
+    public function test_attribute_config_direct_mode_query_scope(): void
     {
         $this->seedQuizAndSurvey();
 
@@ -1963,9 +1968,9 @@ class DirectDiscriminatorTest extends TestCase
         $this->assertEquals('Math Quiz', $quizzes->first()->title);
     }
 
-    public function testAttributeConfigUsesLookupTableReturnsFalse(): void
+    public function test_attribute_config_uses_lookup_table_returns_false(): void
     {
-        $model = new AttributeDirectAssessment();
+        $model = new AttributeDirectAssessment;
         $this->assertFalse($model->usesLookupTable());
         $this->assertNull($model->getSubtypeLookupTable());
         $this->assertNull($model->getSubtypeLookupKey());
@@ -1976,7 +1981,7 @@ class DirectDiscriminatorTest extends TestCase
     // No Duplicate Queries
     // ============================================================
 
-    public function testNoDuplicateQueriesWhenMorphing(): void
+    public function test_no_duplicate_queries_when_morphing(): void
     {
         $this->createQuizRecord(['id' => 1, 'title' => 'Quiz 1', 'enabled' => 1], ['assessment_id' => 1, 'passing_score' => 80]);
         $this->createQuizRecord(['id' => 2, 'title' => 'Quiz 2', 'enabled' => 1], ['assessment_id' => 2, 'passing_score' => 90]);

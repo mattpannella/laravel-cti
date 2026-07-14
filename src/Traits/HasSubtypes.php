@@ -16,6 +16,7 @@ use Pannella\Cti\Support\SubtypedCollection;
  * several static properties to configure the subtype resolution.
  *
  * Required static properties:
+ *
  * @property-read array<string, class-string> $subtypeMap Mapping of type labels to subtype class names
  * @property-read string $subtypeKey Column name containing the type identifier
  *
@@ -32,9 +33,9 @@ trait HasSubtypes
      * When a model is loaded from the database, this method checks if it should
      * be converted to a more specific subtype based on its type identifier.
      *
-     * @param array $attributes The model attributes from the database
-     * @param string|null $connection The database connection name
-     * @return static|\Illuminate\Database\Eloquent\Model
+     * @param  array  $attributes  The model attributes from the database
+     * @param  string|null  $connection  The database connection name
+     * @return static|Model
      */
     public function newFromBuilder($attributes = [], $connection = null): Model
     {
@@ -50,7 +51,7 @@ trait HasSubtypes
             // Create subtype instance with parent's casts applied
             // We use newInstance with $exists=true to skip individual loadSubtypeData()
             // because SubtypedCollection will batch-load all subtype data efficiently
-            $sub = (new $subclass())->newInstance([], true);
+            $sub = (new $subclass)->newInstance([], true);
             $sub->mergeCasts($this->getCasts());
             $sub->setRawAttributes((array) $attributes, true);
 
@@ -74,28 +75,29 @@ trait HasSubtypes
      * batch-loads all rows from the lookup table on first access to avoid
      * N+1 queries when resolving multiple subtypes.
      *
-     * @param int|string|null $typeId The type identifier to resolve
+     * @param  int|string|null  $typeId  The type identifier to resolve
      * @return string|null The resolved type label or null if not found
+     *
      * @throws SubtypeException When lookup table is not configured or resolution fails
      */
     public static function resolveSubtypeLabel(int|string|null $typeId): ?string
     {
-        //null and empty string mean "no type". 0 and '0' are legitimate type ids
+        // null and empty string mean "no type". 0 and '0' are legitimate type ids
         if ($typeId === null || $typeId === '') {
             return null;
         }
 
         try {
-            $instance = new static();
+            $instance = new static;
 
             // Direct mode: discriminator column contains the label directly
-            if (!$instance->usesLookupTable()) {
+            if (! $instance->usesLookupTable()) {
                 return (string) $typeId;
             }
 
             $lookupTable = $instance->getSubtypeLookupTable();
 
-            if (!$lookupTable) {
+            if (! $lookupTable) {
                 throw SubtypeException::missingLookupTable();
             }
 
@@ -145,6 +147,7 @@ trait HasSubtypes
     public function getSubtypeLabel(): ?string
     {
         $typeId = $this->{$this->getSubtypeKey()} ?? null;
+
         return static::resolveSubtypeLabel($typeId);
     }
 
@@ -160,14 +163,14 @@ trait HasSubtypes
         }
 
         $attr = CtiAttributeResolver::resolveSubtypeConfig(static::class);
+
         return $attr ? $attr->map : [];
     }
 
     /**
      * Create a new collection instance with subtype support.
      *
-     * @param array $models Array of models to include in collection
-     * @return \Pannella\Cti\Support\SubtypedCollection
+     * @param  array  $models  Array of models to include in collection
      */
     public function newCollection(array $models = []): SubtypedCollection
     {
@@ -181,8 +184,6 @@ trait HasSubtypes
      *
      * When true, the discriminator column contains a foreign key to a lookup table.
      * When false, the discriminator column contains the type label directly.
-     *
-     * @return bool
      */
     public function usesLookupTable(): bool
     {
@@ -197,7 +198,7 @@ trait HasSubtypes
 
     /**
      * Get the subtype key (discriminator column name).
-     * @return string
+     *
      * @throws SubtypeException If not defined.
      */
     public function getSubtypeKey(): string
@@ -216,6 +217,7 @@ trait HasSubtypes
 
     /**
      * Get the static subtype lookup table name.
+     *
      * @return string|null Returns null when no lookup table is configured (direct discriminator mode).
      */
     public function getSubtypeLookupTable(): ?string
@@ -234,6 +236,7 @@ trait HasSubtypes
 
     /**
      * Get the static subtype lookup key name (PK in lookup table).
+     *
      * @return string|null Returns null when no lookup table is configured (direct discriminator mode).
      */
     public function getSubtypeLookupKey(): ?string
@@ -252,6 +255,7 @@ trait HasSubtypes
 
     /**
      * Get the static subtype lookup label name (label column in lookup table).
+     *
      * @return string|null Returns null when no lookup table is configured (direct discriminator mode).
      */
     public function getSubtypeLookupLabel(): ?string

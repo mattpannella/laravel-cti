@@ -14,6 +14,7 @@ use Pannella\Cti\SubtypeModel;
 class AttributeDirectQuiz extends SubtypeModel
 {
     protected $table = 'direct_assessment';
+
     protected $primaryKey = 'id';
 
     protected $casts = [

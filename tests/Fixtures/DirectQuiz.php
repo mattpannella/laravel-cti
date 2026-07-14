@@ -7,9 +7,13 @@ use Pannella\Cti\SubtypeModel;
 class DirectQuiz extends SubtypeModel
 {
     protected $table = 'direct_assessment';
+
     protected $primaryKey = 'id';
+
     protected $subtypeTable = 'direct_assessment_quiz';
+
     protected $subtypeKeyName = 'assessment_id';
+
     protected $ctiParentClass = DirectAssessment::class;
 
     protected $subtypeAttributes = [

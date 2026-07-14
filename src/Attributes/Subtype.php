@@ -8,12 +8,9 @@ use Attribute;
 class Subtype
 {
     /**
-     * @param string $table
-     * @param array<int, string> $attributes
-     * @param class-string $parentClass
-     * @param string|null $keyName
-     * @param bool|null $inheritParentFillable
-     * @param array<int, string>|null $excludeParentFillable
+     * @param  array<int, string>  $attributes
+     * @param  class-string  $parentClass
+     * @param  array<int, string>|null  $excludeParentFillable
      */
     public function __construct(
         public readonly string $table,

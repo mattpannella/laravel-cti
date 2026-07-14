@@ -6,10 +6,14 @@ use Pannella\Cti\SubtypeModel;
 
 class Quiz extends SubtypeModel
 {
-    protected $table = "assessment";
-    protected $primaryKey = "id";
+    protected $table = 'assessment';
+
+    protected $primaryKey = 'id';
+
     protected $subtypeTable = 'assessment_quiz';
+
     protected $subtypeKeyName = 'assessment_id';
+
     protected $ctiParentClass = Assessment::class;
 
     protected $subtypeAttributes = [
@@ -26,7 +30,7 @@ class Quiz extends SubtypeModel
     ];
 
     protected $attributes = [
-        'show_correct_answers' => false
+        'show_correct_answers' => false,
     ];
 
     protected $fillable = [

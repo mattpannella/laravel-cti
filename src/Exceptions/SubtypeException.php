@@ -12,8 +12,6 @@ class SubtypeException extends CtiException
 {
     /**
      * Create an exception for missing subtype table definition.
-     *
-     * @return self
      */
     public static function missingTable(): self
     {
@@ -23,8 +21,7 @@ class SubtypeException extends CtiException
     /**
      * Create an exception for missing type ID.
      *
-     * @param string $model The model class name
-     * @return self
+     * @param  string  $model  The model class name
      */
     public static function missingTypeId(string $model): self
     {
@@ -34,8 +31,7 @@ class SubtypeException extends CtiException
     /**
      * Create an exception for invalid subtype label.
      *
-     * @param string $label The invalid label
-     * @return self
+     * @param  string  $label  The invalid label
      */
     public static function invalidSubtype(string $label): self
     {
@@ -44,8 +40,6 @@ class SubtypeException extends CtiException
 
     /**
      * Create an exception for missing lookup table configuration.
-     *
-     * @return self
      */
     public static function missingLookupTable(): self
     {
@@ -55,9 +49,8 @@ class SubtypeException extends CtiException
     /**
      * Create an exception for a missing configuration property on a model.
      *
-     * @param string $class The model class name
-     * @param string $property The missing property name
-     * @return self
+     * @param  string  $class  The model class name
+     * @param  string  $property  The missing property name
      */
     public static function missingConfiguration(string $class, string $property): self
     {
@@ -67,9 +60,8 @@ class SubtypeException extends CtiException
     /**
      * Create an exception for failed type resolution from the lookup table.
      *
-     * @param string $label The subtype label that could not be resolved
-     * @param string $table The lookup table that was queried
-     * @return self
+     * @param  string  $label  The subtype label that could not be resolved
+     * @param  string  $table  The lookup table that was queried
      */
     public static function typeResolutionFailed(string $label, string $table): self
     {
@@ -79,8 +71,7 @@ class SubtypeException extends CtiException
     /**
      * Create an exception for failed save operation.
      *
-     * @param string $table The table where the save failed
-     * @return self
+     * @param  string  $table  The table where the save failed
      */
     public static function saveFailed(string $table): self
     {
@@ -90,9 +81,8 @@ class SubtypeException extends CtiException
     /**
      * Create an exception for missing subtype data record.
      *
-     * @param string $model The model class name
-     * @param mixed $key The primary key value
-     * @return self
+     * @param  string  $model  The model class name
+     * @param  mixed  $key  The primary key value
      */
     public static function missingSubtypeData(string $model, $key): self
     {
@@ -102,9 +92,8 @@ class SubtypeException extends CtiException
     /**
      * Create an exception for overlapping columns between parent and subtype tables.
      *
-     * @param string $class The model class name
-     * @param array<int, string> $columns The overlapping column names
-     * @return self
+     * @param  string  $class  The model class name
+     * @param  array<int, string>  $columns  The overlapping column names
      */
     public static function overlappingColumns(string $class, array $columns): self
     {
@@ -112,10 +101,10 @@ class SubtypeException extends CtiException
 
         return new self(
             "{$class} has \$subtypeAttributes that overlap with parent table columns: {$cols}. "
-            . "Subtype attributes must be unique to the subtype table. "
-            . "Consider renaming the subtype column(s) with a prefix (e.g., '"
-            . preg_replace('/^.*\\\\/', '', strtolower($class)) . "_{$columns[0]}') "
-            . "and creating a migration to update the subtype table."
+            .'Subtype attributes must be unique to the subtype table. '
+            ."Consider renaming the subtype column(s) with a prefix (e.g., '"
+            .preg_replace('/^.*\\\\/', '', strtolower($class))."_{$columns[0]}') "
+            .'and creating a migration to update the subtype table.'
         );
     }
 }

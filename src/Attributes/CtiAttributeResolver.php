@@ -15,8 +15,7 @@ class CtiAttributeResolver
     /**
      * Resolve a SubtypeConfig attribute from a parent model class.
      *
-     * @param class-string $class
-     * @return SubtypeConfig|null
+     * @param  class-string  $class
      */
     public static function resolveSubtypeConfig(string $class): ?SubtypeConfig
     {
@@ -27,7 +26,7 @@ class CtiAttributeResolver
         $ref = new ReflectionClass($class);
         $attrs = $ref->getAttributes(SubtypeConfig::class);
 
-        self::$subtypeConfigCache[$class] = !empty($attrs)
+        self::$subtypeConfigCache[$class] = ! empty($attrs)
             ? $attrs[0]->newInstance()
             : null;
 
@@ -37,8 +36,7 @@ class CtiAttributeResolver
     /**
      * Resolve a Subtype attribute from a subtype model class.
      *
-     * @param class-string $class
-     * @return Subtype|null
+     * @param  class-string  $class
      */
     public static function resolveSubtype(string $class): ?Subtype
     {
@@ -49,7 +47,7 @@ class CtiAttributeResolver
         $ref = new ReflectionClass($class);
         $attrs = $ref->getAttributes(Subtype::class);
 
-        self::$subtypeCache[$class] = !empty($attrs)
+        self::$subtypeCache[$class] = ! empty($attrs)
             ? $attrs[0]->newInstance()
             : null;
 

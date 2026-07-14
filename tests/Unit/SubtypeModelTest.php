@@ -2,37 +2,38 @@
 
 namespace Pannella\Cti\Tests\Unit;
 
-use PHPUnit\Framework\TestCase;
+use Illuminate\Config\Repository as ConfigRepository;
+use Illuminate\Container\Container;
 use Illuminate\Database\Capsule\Manager as DB;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Events\Dispatcher;
-use Illuminate\Container\Container;
-use Pannella\Cti\Tests\Fixtures\Assessment;
-use Pannella\Cti\Tests\Fixtures\Quiz;
-use Pannella\Cti\Tests\Fixtures\Survey;
-use Pannella\Cti\Tests\Fixtures\QuizQuestion;
-use Pannella\Cti\Tests\Fixtures\QuizAttempt;
-use Pannella\Cti\Tests\Fixtures\QuizSettings;
-use Pannella\Cti\Tests\Fixtures\QuizCategory;
-use Pannella\Cti\Tests\Fixtures\Student;
-use Pannella\Cti\Tests\Fixtures\AssessmentTag;
-use Pannella\Cti\Tests\Fixtures\MisconfiguredAssessment;
-use Pannella\Cti\Tests\Fixtures\RegularModel;
-use Pannella\Cti\Tests\Fixtures\OverlappingColumnsQuiz;
-use Pannella\Cti\Tests\Fixtures\SoftDeletableQuiz;
-use Pannella\Cti\Tests\Fixtures\MinimalQuiz;
-use Pannella\Cti\Tests\Fixtures\NoInheritQuiz;
-use Pannella\Cti\Tests\Fixtures\ExcludeFieldQuiz;
-use Pannella\Cti\Tests\Fixtures\AttributeNoInheritQuiz;
-use Pannella\Cti\Tests\Fixtures\AttributeExcludeFieldQuiz;
+use Illuminate\Support\Carbon;
 use Pannella\Cti\Exceptions\SubtypeException;
 use Pannella\Cti\SubtypeModel;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Config\Repository as ConfigRepository;
+use Pannella\Cti\Support\SubtypedCollection;
+use Pannella\Cti\Support\SubtypeDiscriminatorScope;
+use Pannella\Cti\Tests\Fixtures\Assessment;
+use Pannella\Cti\Tests\Fixtures\AttributeExcludeFieldQuiz;
+use Pannella\Cti\Tests\Fixtures\AttributeNoInheritQuiz;
+use Pannella\Cti\Tests\Fixtures\ExcludeFieldQuiz;
+use Pannella\Cti\Tests\Fixtures\MinimalQuiz;
+use Pannella\Cti\Tests\Fixtures\MisconfiguredAssessment;
+use Pannella\Cti\Tests\Fixtures\NoInheritQuiz;
+use Pannella\Cti\Tests\Fixtures\OverlappingColumnsQuiz;
+use Pannella\Cti\Tests\Fixtures\Quiz;
+use Pannella\Cti\Tests\Fixtures\QuizCategory;
+use Pannella\Cti\Tests\Fixtures\QuizQuestion;
+use Pannella\Cti\Tests\Fixtures\QuizSettings;
+use Pannella\Cti\Tests\Fixtures\RegularModel;
+use Pannella\Cti\Tests\Fixtures\SoftDeletableQuiz;
+use Pannella\Cti\Tests\Fixtures\Survey;
+use PHPUnit\Framework\TestCase;
 
 class SubtypeModelTest extends TestCase
 {
     protected $db;
+
     protected $dispatcher;
 
     protected function setUp(): void
@@ -47,19 +48,19 @@ class SubtypeModelTest extends TestCase
             'database' => ':memory:',
         ]);
 
-        //set up fresh event dispatcher
+        // set up fresh event dispatcher
         $this->db->setEventDispatcher($this->dispatcher);
         Model::setEventDispatcher($this->dispatcher);
 
         $this->db->setAsGlobal();
         $this->db->bootEloquent();
 
-        //force re-boot of models to ensure events are registered fresh
+        // force re-boot of models to ensure events are registered fresh
         Quiz::clearBootedModels();
         Survey::clearBootedModels();
         Assessment::clearBootedModels();
 
-        //create test tables
+        // create test tables
         $this->createTables();
         $this->seedTestData();
     }
@@ -92,9 +93,9 @@ class SubtypeModelTest extends TestCase
 
         // Reset the validation cache between tests
         $this->resetValidationCache();
-        
+
         // Clear the discriminator scope cache
-        \Pannella\Cti\Support\SubtypeDiscriminatorScope::clearCache();
+        SubtypeDiscriminatorScope::clearCache();
 
         // Clear the creating type ID cache
         Quiz::clearTypeIdCache();
@@ -198,9 +199,9 @@ class SubtypeModelTest extends TestCase
         ]);
     }
 
-    public function testCreateQuizWithOnlySubtypeAttributes(): void
+    public function test_create_quiz_with_only_subtype_attributes(): void
     {
-        $quiz = new Quiz();
+        $quiz = new Quiz;
         $quiz->passing_score = 80;
         $quiz->time_limit = 60;
 
@@ -224,9 +225,9 @@ class SubtypeModelTest extends TestCase
      * Regression: a subtype created with no dirty subtype attributes (all columns
      * left at their defaults) must still persist a subtype row, not just the parent.
      */
-    public function testCreateSurveyWithPristineSubtypeAttributes(): void
+    public function test_create_survey_with_pristine_subtype_attributes(): void
     {
-        $survey = new Survey();
+        $survey = new Survey;
 
         // No subtype attributes are explicitly set — anonymous/allow_multiple_responses
         // keep their defaults, so getDirty() yields no dirty subtype attributes.
@@ -249,9 +250,9 @@ class SubtypeModelTest extends TestCase
     /**
      * Test creating a new quiz automatically sets the correct type_id
      */
-    public function testCreateNewQuiz(): void
+    public function test_create_new_quiz(): void
     {
-        $quiz = new Quiz();
+        $quiz = new Quiz;
         $quiz->title = 'Test Quiz';
         $quiz->description = 'A test quiz';
         $quiz->passing_score = 80;
@@ -285,7 +286,7 @@ class SubtypeModelTest extends TestCase
             'type_id' => 1,
             'title' => 'Test Quiz',
             'description' => 'Test Description',
-            'enabled' => true
+            'enabled' => true,
         ];
 
         $defaultQuiz = [
@@ -310,28 +311,28 @@ class SubtypeModelTest extends TestCase
             'type_id' => 2,
             'title' => 'Test Survey',
             'description' => 'Test Description',
-            'enabled' => true
+            'enabled' => true,
         ];
 
         $defaultSurvey = [
             'assessment_id' => 1,
             'anonymous' => false,
-            'allow_multiple_responses' => false
+            'allow_multiple_responses' => false,
         ];
 
         DB::table('assessment')->insert(array_merge($defaultAssessment, $assessmentData));
         DB::table('assessment_survey')->insert(array_merge($defaultSurvey, $surveyData));
     }
 
-    public function testLoadExistingQuiz(): void
+    public function test_load_existing_quiz(): void
     {
         $this->createQuizRecord([
             'title' => 'Existing Quiz',
-            'description' => 'An existing quiz'
+            'description' => 'An existing quiz',
         ], [
             'passing_score' => 70,
             'time_limit' => 30,
-            'show_correct_answers' => false
+            'show_correct_answers' => false,
         ]);
 
         $quiz = Quiz::find(1);
@@ -343,15 +344,15 @@ class SubtypeModelTest extends TestCase
         $this->assertEquals(0, $quiz->show_correct_answers);
     }
 
-    public function testUpdateExistingQuiz(): void
+    public function test_update_existing_quiz(): void
     {
         $this->createQuizRecord([
             'title' => 'Original Quiz',
-            'description' => 'Original description'
+            'description' => 'Original description',
         ], [
             'passing_score' => 70,
             'time_limit' => 30,
-            'show_correct_answers' => false
+            'show_correct_answers' => false,
         ]);
 
         $quiz = Quiz::find(1);
@@ -366,12 +367,12 @@ class SubtypeModelTest extends TestCase
         $this->assertEquals(90, $quizData->passing_score);
     }
 
-    public function testDeleteQuiz(): void
+    public function test_delete_quiz(): void
     {
         $this->createQuizRecord([
-            'title' => 'Quiz to Delete'
+            'title' => 'Quiz to Delete',
         ], [
-            'passing_score' => 70
+            'passing_score' => 70,
         ]);
 
         $quiz = Quiz::find(1);
@@ -384,18 +385,18 @@ class SubtypeModelTest extends TestCase
     /**
      * Test loading multiple quizzes with efficient subtype loading
      */
-    public function testBulkLoadingSubtypes(): void
+    public function test_bulk_loading_subtypes(): void
     {
         // Create multiple quizzes with unique IDs
         $this->createQuizRecord(
             [
                 'id' => 1,
                 'title' => 'Quiz 1',
-                'type_id' => 1
+                'type_id' => 1,
             ],
             [
                 'assessment_id' => 1,
-                'passing_score' => 70
+                'passing_score' => 70,
             ]
         );
 
@@ -403,11 +404,11 @@ class SubtypeModelTest extends TestCase
             [
                 'id' => 2,
                 'title' => 'Quiz 2',
-                'type_id' => 1
+                'type_id' => 1,
             ],
             [
                 'assessment_id' => 2,
-                'passing_score' => 80
+                'passing_score' => 80,
             ]
         );
 
@@ -415,11 +416,11 @@ class SubtypeModelTest extends TestCase
             [
                 'id' => 3,
                 'title' => 'Quiz 3',
-                'type_id' => 1
+                'type_id' => 1,
             ],
             [
                 'assessment_id' => 3,
-                'passing_score' => 90
+                'passing_score' => 90,
             ]
         );
 
@@ -438,14 +439,14 @@ class SubtypeModelTest extends TestCase
     /**
      * Test replicating a quiz (clone with new ID)
      */
-    public function testReplicateQuiz(): void
+    public function test_replicate_quiz(): void
     {
         $this->createQuizRecord([
             'title' => 'Original Quiz',
-            'description' => 'Original Description'
+            'description' => 'Original Description',
         ], [
             'passing_score' => 70,
-            'time_limit' => 30
+            'time_limit' => 30,
         ]);
 
         $original = Quiz::find(1);
@@ -462,12 +463,12 @@ class SubtypeModelTest extends TestCase
     /**
      * Test refreshing a quiz from database
      */
-    public function testRefreshQuiz(): void
+    public function test_refresh_quiz(): void
     {
         $this->createQuizRecord([
-            'title' => 'Test Quiz'
+            'title' => 'Test Quiz',
         ], [
-            'passing_score' => 70
+            'passing_score' => 70,
         ]);
 
         $quiz = Quiz::find(1);
@@ -485,38 +486,38 @@ class SubtypeModelTest extends TestCase
     /**
      * Test query builder with subtype conditions
      */
-    public function testQueryBuilderWithSubtypeConditions(): void
+    public function test_query_builder_with_subtype_conditions(): void
     {
         $this->createQuizRecord(
             [
                 'id' => 1,
-                'type_id' => 1
+                'type_id' => 1,
             ],
             [
                 'assessment_id' => 1,
-                'passing_score' => 70
+                'passing_score' => 70,
             ]
         );
 
         $this->createQuizRecord(
             [
                 'id' => 2,
-                'type_id' => 1
+                'type_id' => 1,
             ],
             [
                 'assessment_id' => 2,
-                'passing_score' => 80
+                'passing_score' => 80,
             ]
         );
 
         $this->createQuizRecord(
             [
                 'id' => 3,
-                'type_id' => 1
+                'type_id' => 1,
             ],
             [
                 'assessment_id' => 3,
-                'passing_score' => 90
+                'passing_score' => 90,
             ]
         );
 
@@ -529,9 +530,9 @@ class SubtypeModelTest extends TestCase
     /**
      * Test handling null values
      */
-    public function testNullValues(): void
+    public function test_null_values(): void
     {
-        $quiz = new Quiz();
+        $quiz = new Quiz;
         $quiz->title = 'Test Quiz';
         $quiz->description = null;
         $quiz->time_limit = null;
@@ -547,7 +548,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test CTI-specific events
      */
-    public function testSubtypeEvents(): void
+    public function test_subtype_events(): void
     {
         $events = [];
 
@@ -559,7 +560,7 @@ class SubtypeModelTest extends TestCase
             $events[] = 'subtypeSaved';
         });
 
-        $quiz = new Quiz();
+        $quiz = new Quiz;
         $quiz->title = 'Test Quiz';
         $quiz->passing_score = 70;
         $quiz->time_limit = 60;
@@ -572,14 +573,14 @@ class SubtypeModelTest extends TestCase
     /**
      * Test mass assignment
      */
-    public function testMassAssignment(): void
+    public function test_mass_assignment(): void
     {
         $quiz = Quiz::create([
             'title' => 'Mass Assigned Quiz',
             'description' => 'Created via mass assignment',
             'passing_score' => 70,
             'time_limit' => 30,
-            'show_correct_answers' => true
+            'show_correct_answers' => true,
         ]);
 
         $this->assertNotNull($quiz->id);
@@ -590,26 +591,26 @@ class SubtypeModelTest extends TestCase
     /**
      * Test that accessing undefined attributes returns null
      */
-    public function testUndefinedAttributesReturnsNull(): void
+    public function test_undefined_attributes_returns_null(): void
     {
-        $quiz = new Quiz();
+        $quiz = new Quiz;
         $this->assertNull($quiz->nonexistent_attribute);
     }
 
     /**
      * Test subtype casting with eager loading
      */
-    public function testEagerLoading(): void
+    public function test_eager_loading(): void
     {
         $this->createQuizRecord(
             [
                 'id' => 1,
                 'title' => 'Quiz 1',
-                'type_id' => 1
+                'type_id' => 1,
             ],
             [
                 'assessment_id' => 1,
-                'passing_score' => 70
+                'passing_score' => 70,
             ]
         );
 
@@ -617,11 +618,11 @@ class SubtypeModelTest extends TestCase
             [
                 'id' => 2,
                 'title' => 'Quiz 2',
-                'type_id' => 1
+                'type_id' => 1,
             ],
             [
                 'assessment_id' => 2,
-                'passing_score' => 80
+                'passing_score' => 80,
             ]
         );
 
@@ -638,18 +639,18 @@ class SubtypeModelTest extends TestCase
     /**
      * Test invalid type_id returns base Assessment (not morphed to a subtype)
      */
-    public function testInvalidTypeId(): void
+    public function test_invalid_type_id(): void
     {
         // Insert a type_id whose label isn't in the subtypeMap
         DB::table('assessment_type')->insert([
             'id' => 999,
-            'label' => 'invalid_type'
+            'label' => 'invalid_type',
         ]);
 
         DB::table('assessment')->insert([
             'id' => 1,
             'type_id' => 999,
-            'title' => 'Invalid Assessment'
+            'title' => 'Invalid Assessment',
         ]);
 
         // Loading through the parent should return a base Assessment, not a subtype
@@ -664,9 +665,9 @@ class SubtypeModelTest extends TestCase
     /**
      * Test dirty attributes tracking
      */
-    public function testDirtyAttributesTracking(): void
+    public function test_dirty_attributes_tracking(): void
     {
-        $quiz = new Quiz();
+        $quiz = new Quiz;
 
         // Set initial attributes
         $quiz->title = 'Test Quiz';
@@ -694,9 +695,9 @@ class SubtypeModelTest extends TestCase
     /**
      * Test that primary keys are properly handled
      */
-    public function testPrimaryKeyHandling(): void
+    public function test_primary_key_handling(): void
     {
-        $quiz = new Quiz();
+        $quiz = new Quiz;
         $quiz->title = 'Test Quiz';
         $quiz->passing_score = 70;
         $quiz->save();
@@ -714,9 +715,9 @@ class SubtypeModelTest extends TestCase
     /**
      * Test that timestamps are properly handled
      */
-    public function testTimestampHandling(): void
+    public function test_timestamp_handling(): void
     {
-        $quiz = new Quiz();
+        $quiz = new Quiz;
         $quiz->title = 'Test Quiz';
         $quiz->passing_score = 70;
         $quiz->save();
@@ -736,15 +737,15 @@ class SubtypeModelTest extends TestCase
     /**
      * Test that fillable attributes are respected
      */
-    public function testFillableProtection(): void
+    public function test_fillable_protection(): void
     {
         $data = [
             'title' => 'Test Quiz',
             'passing_score' => 70,
-            'non_fillable_field' => 'should not be set'
+            'non_fillable_field' => 'should not be set',
         ];
 
-        $quiz = new Quiz();
+        $quiz = new Quiz;
         $quiz->fill($data);
 
         $this->assertEquals('Test Quiz', $quiz->title);
@@ -757,7 +758,7 @@ class SubtypeModelTest extends TestCase
      * Verifies Quiz::all() and Survey::all() both load subtype data correctly
      * when both types exist in the same parent table.
      */
-    public function testMixedSubtypesInDatabase(): void
+    public function test_mixed_subtypes_in_database(): void
     {
         // Create a quiz (type_id=1) and a survey (type_id=2) in the same parent table
         $this->createQuizRecord(
@@ -807,19 +808,19 @@ class SubtypeModelTest extends TestCase
     /**
      * Test that missingConfiguration exception is thrown for missing subtypeKey.
      */
-    public function testMissingConfigurationException(): void
+    public function test_missing_configuration_exception(): void
     {
         $this->expectException(SubtypeException::class);
         $this->expectExceptionMessage('Missing CTI configuration property $subtypeKey');
 
-        $model = new MisconfiguredAssessment();
+        $model = new MisconfiguredAssessment;
         $model->getSubtypeKey();
     }
 
     /**
      * Test that typeResolutionFailed exception is thrown for unmapped label.
      */
-    public function testTypeResolutionFailedException(): void
+    public function test_type_resolution_failed_exception(): void
     {
         $this->expectException(SubtypeException::class);
         $this->expectExceptionMessage("Could not resolve type ID for label 'nonexistent' in table 'assessment_type'");
@@ -830,7 +831,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test whereNotIn query builder with subtype columns.
      */
-    public function testWhereNotInWithSubtypeColumn(): void
+    public function test_where_not_in_with_subtype_column(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'type_id' => 1],
@@ -854,7 +855,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test whereBetween query builder with subtype columns.
      */
-    public function testWhereBetweenWithSubtypeColumn(): void
+    public function test_where_between_with_subtype_column(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'type_id' => 1],
@@ -878,9 +879,9 @@ class SubtypeModelTest extends TestCase
     /**
      * Test creating a survey sets the correct type_id automatically.
      */
-    public function testCreateNewSurvey(): void
+    public function test_create_new_survey(): void
     {
-        $survey = new Survey();
+        $survey = new Survey;
         $survey->title = 'Test Survey';
         $survey->description = 'A test survey';
         $survey->anonymous = true;
@@ -903,7 +904,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test orderBy with subtype columns.
      */
-    public function testOrderByWithSubtypeColumn(): void
+    public function test_order_by_with_subtype_column(): void
     {
         $this->createQuizRecord(['id' => 1, 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 90]);
         $this->createQuizRecord(['id' => 2, 'type_id' => 1], ['assessment_id' => 2, 'passing_score' => 70]);
@@ -918,7 +919,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test orderBy with subtype columns descending.
      */
-    public function testOrderByDescWithSubtypeColumn(): void
+    public function test_order_by_desc_with_subtype_column(): void
     {
         $this->createQuizRecord(['id' => 1, 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 90]);
         $this->createQuizRecord(['id' => 2, 'type_id' => 1], ['assessment_id' => 2, 'passing_score' => 70]);
@@ -933,7 +934,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test groupBy with subtype columns.
      */
-    public function testGroupByWithSubtypeColumn(): void
+    public function test_group_by_with_subtype_column(): void
     {
         $this->createQuizRecord(['id' => 1, 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 80, 'show_correct_answers' => true]);
         $this->createQuizRecord(['id' => 2, 'type_id' => 1], ['assessment_id' => 2, 'passing_score' => 80, 'show_correct_answers' => true]);
@@ -954,7 +955,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test having clause with subtype columns.
      */
-    public function testHavingWithSubtypeColumn(): void
+    public function test_having_with_subtype_column(): void
     {
         $this->createQuizRecord(['id' => 1, 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 80]);
         $this->createQuizRecord(['id' => 2, 'type_id' => 1], ['assessment_id' => 2, 'passing_score' => 80]);
@@ -972,7 +973,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test aggregate count function with subtype columns.
      */
-    public function testAggregateCountWithSubtypeColumn(): void
+    public function test_aggregate_count_with_subtype_column(): void
     {
         $this->createQuizRecord(['id' => 1, 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 80]);
         $this->createQuizRecord(['id' => 2, 'type_id' => 1], ['assessment_id' => 2, 'passing_score' => 90]);
@@ -986,7 +987,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test aggregate sum function with subtype columns.
      */
-    public function testAggregateSumWithSubtypeColumn(): void
+    public function test_aggregate_sum_with_subtype_column(): void
     {
         $this->createQuizRecord(['id' => 1, 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 80]);
         $this->createQuizRecord(['id' => 2, 'type_id' => 1], ['assessment_id' => 2, 'passing_score' => 90]);
@@ -1001,7 +1002,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test aggregate avg function with subtype columns.
      */
-    public function testAggregateAvgWithSubtypeColumn(): void
+    public function test_aggregate_avg_with_subtype_column(): void
     {
         $this->createQuizRecord(['id' => 1, 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 80]);
         $this->createQuizRecord(['id' => 2, 'type_id' => 1], ['assessment_id' => 2, 'passing_score' => 90]);
@@ -1016,7 +1017,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test aggregate max function with subtype columns.
      */
-    public function testAggregateMaxWithSubtypeColumn(): void
+    public function test_aggregate_max_with_subtype_column(): void
     {
         $this->createQuizRecord(['id' => 1, 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 80]);
         $this->createQuizRecord(['id' => 2, 'type_id' => 1], ['assessment_id' => 2, 'passing_score' => 90]);
@@ -1031,7 +1032,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test aggregate min function with subtype columns.
      */
-    public function testAggregateMinWithSubtypeColumn(): void
+    public function test_aggregate_min_with_subtype_column(): void
     {
         $this->createQuizRecord(['id' => 1, 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 80]);
         $this->createQuizRecord(['id' => 2, 'type_id' => 1], ['assessment_id' => 2, 'passing_score' => 90]);
@@ -1046,7 +1047,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test select with specific subtype columns.
      */
-    public function testSelectWithSubtypeColumns(): void
+    public function test_select_with_subtype_columns(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Test Quiz', 'type_id' => 1],
@@ -1063,7 +1064,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test subtypeHasMany relationship.
      */
-    public function testSubtypeHasManyRelationship(): void
+    public function test_subtype_has_many_relationship(): void
     {
         $this->createQuizRecord(['id' => 1, 'title' => 'Test Quiz', 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 80]);
 
@@ -1083,7 +1084,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test subtypeHasMany relationship with filtering.
      */
-    public function testSubtypeHasManyWithFiltering(): void
+    public function test_subtype_has_many_with_filtering(): void
     {
         $this->createQuizRecord(['id' => 1, 'title' => 'Test Quiz', 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 80]);
 
@@ -1102,7 +1103,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test subtypeHasMany relationship with multiple subtype instances.
      */
-    public function testSubtypeHasManyWithMultipleInstances(): void
+    public function test_subtype_has_many_with_multiple_instances(): void
     {
         $this->createQuizRecord(['id' => 1, 'title' => 'Quiz 1', 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 80]);
         $this->createQuizRecord(['id' => 2, 'title' => 'Quiz 2', 'type_id' => 1], ['assessment_id' => 2, 'passing_score' => 90]);
@@ -1125,14 +1126,14 @@ class SubtypeModelTest extends TestCase
     /**
      * Test creating related models through subtypeHasMany relationship.
      */
-    public function testSubtypeHasManyCreate(): void
+    public function test_subtype_has_many_create(): void
     {
         $this->createQuizRecord(['id' => 1, 'title' => 'Test Quiz', 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 80]);
 
         $quiz = Quiz::find(1);
         $question = $quiz->questions()->create([
             'question_text' => 'New Question',
-            'points' => 25
+            'points' => 25,
         ]);
 
         $this->assertNotNull($question->id);
@@ -1146,7 +1147,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test subtypeHasMany relationship count.
      */
-    public function testSubtypeHasManyCount(): void
+    public function test_subtype_has_many_count(): void
     {
         $this->createQuizRecord(['id' => 1, 'title' => 'Test Quiz', 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 80]);
 
@@ -1165,17 +1166,18 @@ class SubtypeModelTest extends TestCase
     /**
      * Test subtypeSaving event can halt save operation.
      */
-    public function testSubtypeSavingEventCanHalt(): void
+    public function test_subtype_saving_event_can_halt(): void
     {
         $eventFired = false;
 
         Quiz::subtypeSaving(function ($quiz) use (&$eventFired) {
             $eventFired = true;
+
             // Return false to halt the save
             return false;
         });
 
-        $quiz = new Quiz();
+        $quiz = new Quiz;
         $quiz->title = 'Test Quiz';
         $quiz->passing_score = 70;
 
@@ -1189,16 +1191,17 @@ class SubtypeModelTest extends TestCase
     /**
      * Test subtypeSaving event allows save when returning true.
      */
-    public function testSubtypeSavingEventAllowsSave(): void
+    public function test_subtype_saving_event_allows_save(): void
     {
         $eventFired = false;
 
         Quiz::subtypeSaving(function ($quiz) use (&$eventFired) {
             $eventFired = true;
+
             return true;
         });
 
-        $quiz = new Quiz();
+        $quiz = new Quiz;
         $quiz->title = 'Test Quiz';
         $quiz->passing_score = 70;
 
@@ -1212,7 +1215,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test subtypeDeleting event can halt delete operation.
      */
-    public function testSubtypeDeletingEventCanHalt(): void
+    public function test_subtype_deleting_event_can_halt(): void
     {
         $this->createQuizRecord(['id' => 1, 'title' => 'Test Quiz', 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 80]);
 
@@ -1220,6 +1223,7 @@ class SubtypeModelTest extends TestCase
 
         Quiz::subtypeDeleting(function ($quiz) use (&$eventFired) {
             $eventFired = true;
+
             // Return false to halt the delete
             return false;
         });
@@ -1238,7 +1242,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test subtypeDeleting event allows delete when returning true.
      */
-    public function testSubtypeDeletingEventAllowsDelete(): void
+    public function test_subtype_deleting_event_allows_delete(): void
     {
         $this->createQuizRecord(['id' => 1, 'title' => 'Test Quiz', 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 80]);
 
@@ -1246,6 +1250,7 @@ class SubtypeModelTest extends TestCase
 
         Quiz::subtypeDeleting(function ($quiz) use (&$eventFired) {
             $eventFired = true;
+
             return true;
         });
 
@@ -1263,7 +1268,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test subtypeDeleted event fires after successful delete.
      */
-    public function testSubtypeDeletedEventFires(): void
+    public function test_subtype_deleted_event_fires(): void
     {
         $this->createQuizRecord(['id' => 1, 'title' => 'Test Quiz', 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 80]);
 
@@ -1285,7 +1290,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test subtypeSaved event fires after successful save.
      */
-    public function testSubtypeSavedEventFires(): void
+    public function test_subtype_saved_event_fires(): void
     {
         $eventFired = false;
         $savedQuiz = null;
@@ -1295,7 +1300,7 @@ class SubtypeModelTest extends TestCase
             $savedQuiz = $quiz;
         });
 
-        $quiz = new Quiz();
+        $quiz = new Quiz;
         $quiz->title = 'Test Quiz';
         $quiz->passing_score = 70;
         $quiz->save();
@@ -1309,7 +1314,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test subtypeSaving event receives model with correct data.
      */
-    public function testSubtypeSavingEventReceivesCorrectData(): void
+    public function test_subtype_saving_event_receives_correct_data(): void
     {
         $receivedQuiz = null;
 
@@ -1317,7 +1322,7 @@ class SubtypeModelTest extends TestCase
             $receivedQuiz = $quiz;
         });
 
-        $quiz = new Quiz();
+        $quiz = new Quiz;
         $quiz->title = 'Test Quiz';
         $quiz->passing_score = 85;
         $quiz->time_limit = 120;
@@ -1332,10 +1337,10 @@ class SubtypeModelTest extends TestCase
     /**
      * Test SubtypedCollection with empty collection.
      */
-    public function testSubtypedCollectionWithEmptyCollection(): void
+    public function test_subtyped_collection_with_empty_collection(): void
     {
-        $collection = new \Pannella\Cti\Support\SubtypedCollection([]);
-        
+        $collection = new SubtypedCollection([]);
+
         $this->assertCount(0, $collection);
         $this->assertTrue($collection->isEmpty());
     }
@@ -1343,18 +1348,18 @@ class SubtypeModelTest extends TestCase
     /**
      * Test SubtypedCollection with models that have no subtype table.
      */
-    public function testSubtypedCollectionWithNoSubtypeTable(): void
+    public function test_subtyped_collection_with_no_subtype_table(): void
     {
         DB::table('assessment_type')->insert(['id' => 3, 'label' => 'regular']);
         DB::table('assessment')->insert([
             'id' => 1,
             'type_id' => 3,
             'title' => 'Regular Assessment',
-            'enabled' => true
+            'enabled' => true,
         ]);
 
         $model = RegularModel::find(1);
-        $collection = new \Pannella\Cti\Support\SubtypedCollection([$model]);
+        $collection = new SubtypedCollection([$model]);
 
         $this->assertCount(1, $collection);
         $this->assertEquals('Regular Assessment', $collection->first()->title);
@@ -1363,14 +1368,14 @@ class SubtypeModelTest extends TestCase
     /**
      * Test SubtypedCollection with models missing primary keys.
      */
-    public function testSubtypedCollectionWithModelsWithoutKeys(): void
+    public function test_subtyped_collection_with_models_without_keys(): void
     {
-        $model = new Quiz();
+        $model = new Quiz;
         $model->title = 'Unsaved Quiz';
         $model->passing_score = 70;
         // Note: Not saved, so no primary key
 
-        $collection = new \Pannella\Cti\Support\SubtypedCollection([$model]);
+        $collection = new SubtypedCollection([$model]);
 
         $this->assertCount(1, $collection);
         $this->assertNull($collection->first()->id);
@@ -1379,11 +1384,11 @@ class SubtypeModelTest extends TestCase
     /**
      * Test model without subtypeTable behaves like normal model.
      */
-    public function testModelWithoutSubtypeTableActsLikeNormalModel(): void
+    public function test_model_without_subtype_table_acts_like_normal_model(): void
     {
         DB::table('assessment_type')->insert(['id' => 3, 'label' => 'regular']);
-        
-        $model = new RegularModel();
+
+        $model = new RegularModel;
         $model->type_id = 3;
         $model->title = 'Regular Model Test';
         $model->description = 'Testing regular model behavior';
@@ -1403,14 +1408,14 @@ class SubtypeModelTest extends TestCase
     /**
      * Test model without subtypeAttributes behaves like normal model.
      */
-    public function testModelWithoutSubtypeAttributesActsLikeNormalModel(): void
+    public function test_model_without_subtype_attributes_acts_like_normal_model(): void
     {
         DB::table('assessment_type')->insert(['id' => 3, 'label' => 'regular']);
         DB::table('assessment')->insert([
             'id' => 1,
             'type_id' => 3,
             'title' => 'Test',
-            'enabled' => true
+            'enabled' => true,
         ]);
 
         $model = RegularModel::find(1);
@@ -1418,7 +1423,7 @@ class SubtypeModelTest extends TestCase
         $result = $model->save();
 
         $this->assertTrue($result);
-        
+
         $assessmentRecord = DB::table('assessment')->where('id', 1)->first();
         $this->assertEquals('Updated Test', $assessmentRecord->title);
     }
@@ -1426,7 +1431,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test loadSubtypeData when subtype record doesn't exist (should not throw exception).
      */
-    public function testLoadSubtypeDataWhenSubtypeRecordMissing(): void
+    public function test_load_subtype_data_when_subtype_record_missing(): void
     {
         $this->setCtiConfig('log');
 
@@ -1435,7 +1440,7 @@ class SubtypeModelTest extends TestCase
             'id' => 1,
             'type_id' => 1,
             'title' => 'Quiz Without Subtype Data',
-            'enabled' => true
+            'enabled' => true,
         ]);
 
         $quiz = Quiz::find(1);
@@ -1451,7 +1456,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test save with only subtype attributes modified.
      */
-    public function testSaveWithOnlySubtypeAttributesModified(): void
+    public function test_save_with_only_subtype_attributes_modified(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Original Title', 'type_id' => 1],
@@ -1459,7 +1464,7 @@ class SubtypeModelTest extends TestCase
         );
 
         $quiz = Quiz::find(1);
-        
+
         // Modify only subtype attribute
         $quiz->passing_score = 85;
         $result = $quiz->save();
@@ -1478,7 +1483,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test save with only parent attributes modified.
      */
-    public function testSaveWithOnlyParentAttributesModified(): void
+    public function test_save_with_only_parent_attributes_modified(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Original Title', 'type_id' => 1],
@@ -1486,7 +1491,7 @@ class SubtypeModelTest extends TestCase
         );
 
         $quiz = Quiz::find(1);
-        
+
         // Modify only parent attribute
         $quiz->title = 'Updated Title';
         $result = $quiz->save();
@@ -1507,9 +1512,9 @@ class SubtypeModelTest extends TestCase
      * Test pagination with subtype data loading.
      * Note: Pagination requires illuminate/pagination package which may not be installed.
      */
-    public function testPaginationWithSubtypeData(): void
+    public function test_pagination_with_subtype_data(): void
     {
-        if (!class_exists('\Illuminate\Pagination\Paginator')) {
+        if (! class_exists('\Illuminate\Pagination\Paginator')) {
             $this->markTestSkipped('Pagination package not installed');
         }
 
@@ -1537,7 +1542,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test cache behavior in resolveSubtypeLabel.
      */
-    public function testResolveSubtypeLabelCaching(): void
+    public function test_resolve_subtype_label_caching(): void
     {
         // First call should hit the database
         $label1 = Assessment::resolveSubtypeLabel(1);
@@ -1555,7 +1560,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test querying with table-qualified column names.
      */
-    public function testQueryWithTableQualifiedColumnNames(): void
+    public function test_query_with_table_qualified_column_names(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Quiz 1', 'type_id' => 1],
@@ -1577,7 +1582,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test parent model morphs to subtype via newFromBuilder.
      */
-    public function testParentModelMorphsToSubtype(): void
+    public function test_parent_model_morphs_to_subtype(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Test Quiz', 'type_id' => 1],
@@ -1592,13 +1597,13 @@ class SubtypeModelTest extends TestCase
         $assessments = Assessment::orderBy('id')->get();
 
         $this->assertCount(2, $assessments);
-        
+
         // The first assessment (id=1, type_id=1) should be morphed to Quiz
         $quiz = $assessments[0];
         $this->assertInstanceOf(Quiz::class, $quiz);
         $this->assertEquals('Test Quiz', $quiz->title);
         $this->assertEquals(80, $quiz->passing_score);
-        
+
         // The second assessment (id=2, type_id=2) should be morphed to Survey
         $survey = $assessments[1];
         $this->assertInstanceOf(Survey::class, $survey);
@@ -1609,7 +1614,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test parent model find() morphs to correct subtype.
      */
-    public function testParentModelFindMorphsToSubtype(): void
+    public function test_parent_model_find_morphs_to_subtype(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Test Quiz', 'type_id' => 1],
@@ -1627,10 +1632,10 @@ class SubtypeModelTest extends TestCase
     /**
      * Test newModelInstance creates instance of correct class.
      */
-    public function testNewModelInstance(): void
+    public function test_new_model_instance(): void
     {
-        $quiz = new Quiz();
-        
+        $quiz = new Quiz;
+
         // newModelInstance should create a new instance of the same class
         $instance = $quiz->newModelInstance(['title' => 'New Quiz']);
 
@@ -1642,7 +1647,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test getSubtypeLabel on base Assessment model (when morphing is disabled).
      */
-    public function testGetSubtypeLabelOnBaseAssessmentModel(): void
+    public function test_get_subtype_label_on_base_assessment_model(): void
     {
         // Insert an assessment with a type not in the subtype map to prevent morphing
         DB::table('assessment_type')->insert(['id' => 99, 'label' => 'unmapped_type']);
@@ -1650,14 +1655,14 @@ class SubtypeModelTest extends TestCase
             'id' => 1,
             'type_id' => 99,
             'title' => 'Unmapped Assessment',
-            'enabled' => true
+            'enabled' => true,
         ]);
 
         // This should return base Assessment instance (no morphing)
         $assessment = Assessment::find(1);
         $this->assertInstanceOf(Assessment::class, $assessment);
         $this->assertNotInstanceOf(Quiz::class, $assessment);
-        
+
         // getSubtypeLabel should work on base Assessment instances
         $label = $assessment->getSubtypeLabel();
         $this->assertEquals('unmapped_type', $label);
@@ -1666,9 +1671,9 @@ class SubtypeModelTest extends TestCase
     /**
      * Test getSubtypeMap returns correct mapping.
      */
-    public function testGetSubtypeMap(): void
+    public function test_get_subtype_map(): void
     {
-        $assessment = new Assessment();
+        $assessment = new Assessment;
         $map = $assessment->getSubtypeMap();
 
         $this->assertIsArray($map);
@@ -1681,7 +1686,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test parent model casts are applied to morphed subtype instances.
      */
-    public function testParentCastsAppliedToMorphedInstances(): void
+    public function test_parent_casts_applied_to_morphed_instances(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Test Quiz', 'type_id' => 1, 'enabled' => 1],
@@ -1692,11 +1697,11 @@ class SubtypeModelTest extends TestCase
         $quiz = Assessment::find(1);
 
         $this->assertInstanceOf(Quiz::class, $quiz);
-        
+
         // The 'enabled' field should be cast to boolean (parent cast)
         $this->assertIsBool($quiz->enabled);
         $this->assertTrue($quiz->enabled);
-        
+
         // Verify it's actually boolean, not int
         $this->assertSame(true, $quiz->enabled);
         $this->assertNotSame(1, $quiz->enabled);
@@ -1705,7 +1710,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test parent model casts work with false values.
      */
-    public function testParentCastsWithFalseValues(): void
+    public function test_parent_casts_with_false_values(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Test Quiz', 'type_id' => 1, 'enabled' => 0],
@@ -1724,7 +1729,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test that Assessment::all() does not generate duplicate queries.
      */
-    public function testNoDuplicateQueriesWhenMorphing(): void
+    public function test_no_duplicate_queries_when_morphing(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Quiz 1', 'type_id' => 1, 'enabled' => 1],
@@ -1760,10 +1765,10 @@ class SubtypeModelTest extends TestCase
      * Parent model (Assessment) has casts for 'enabled' => 'boolean' and timestamps => 'datetime'.
      * Without parent cast inheritance, enabled would be 0/1 instead of boolean.
      */
-    public function testDirectQueryAppliesParentCasts(): void
+    public function test_direct_query_applies_parent_casts(): void
     {
         $timestamp = date('Y-m-d H:i:s');
-        
+
         // Create quiz records with enabled=0 and enabled=1
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Quiz with enabled=0', 'type_id' => 1, 'enabled' => 0, 'created_at' => $timestamp, 'updated_at' => $timestamp],
@@ -1790,8 +1795,8 @@ class SubtypeModelTest extends TestCase
         $this->assertTrue($quiz2->enabled, 'enabled=1 should cast to true');
 
         // Verify datetime cast is applied (Carbon instance, not string)
-        $this->assertInstanceOf(\Illuminate\Support\Carbon::class, $quiz1->created_at);
-        $this->assertInstanceOf(\Illuminate\Support\Carbon::class, $quiz1->updated_at);
+        $this->assertInstanceOf(Carbon::class, $quiz1->created_at);
+        $this->assertInstanceOf(Carbon::class, $quiz1->updated_at);
     }
 
     /**
@@ -1799,7 +1804,7 @@ class SubtypeModelTest extends TestCase
      * Both parent (title, description, enabled) and subtype (passing_score, time_limit) attributes
      * should be accessible on the Quiz instance.
      */
-    public function testDirectQueryMergesParentAttributes(): void
+    public function test_direct_query_merges_parent_attributes(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'My Quiz', 'description' => 'Test description', 'type_id' => 1, 'enabled' => 1],
@@ -1828,10 +1833,10 @@ class SubtypeModelTest extends TestCase
      * Test that models without $ctiParentClass still work (backwards compatibility).
      * RegularModel doesn't have $ctiParentClass set, so it should work as before.
      */
-    public function testDirectQueryWithoutParentClassStillWorks(): void
+    public function test_direct_query_without_parent_class_still_works(): void
     {
         $timestamp = date('Y-m-d H:i:s');
-        
+
         // Create a regular model record (no subtype table)
         DB::table('assessment')->insert([
             'id' => 999,
@@ -1856,7 +1861,7 @@ class SubtypeModelTest extends TestCase
      * Test that parent relationships are accessible from subtype instances.
      * Assessment has a tags() relationship, which should be accessible from Quiz instances.
      */
-    public function testParentRelationshipAccessibleFromSubtype(): void
+    public function test_parent_relationship_accessible_from_subtype(): void
     {
         // Create a quiz with tags
         $this->createQuizRecord(
@@ -1885,7 +1890,7 @@ class SubtypeModelTest extends TestCase
      * Test that parent relationships are accessible from subtype instances as
      * dynamic properties (e.g. $quiz->tags), not just as method calls.
      */
-    public function testParentRelationshipAccessibleFromSubtypeAsDynamicProperty(): void
+    public function test_parent_relationship_accessible_from_subtype_as_dynamic_property(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Quiz with tags', 'type_id' => 1],
@@ -1916,7 +1921,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test that parent relationships are eager-loadable from subtype instances.
      */
-    public function testParentRelationshipEagerLoadableFromSubtype(): void
+    public function test_parent_relationship_eager_loadable_from_subtype(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Quiz with tags', 'type_id' => 1],
@@ -1939,7 +1944,7 @@ class SubtypeModelTest extends TestCase
      * mistaken for a relationship. Pre-fix this returned null, so the override
      * must preserve that behavior — not throw Eloquent's relationship LogicException.
      */
-    public function testCtiInfrastructureMethodNotTreatedAsRelation(): void
+    public function test_cti_infrastructure_method_not_treated_as_relation(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Quiz', 'type_id' => 1],
@@ -1958,7 +1963,7 @@ class SubtypeModelTest extends TestCase
      * Test that parent relationship queries work correctly.
      * Should be able to query parent relationships with where clauses, etc.
      */
-    public function testParentRelationshipQueryWorks(): void
+    public function test_parent_relationship_query_works(): void
     {
         // Create a quiz with multiple tags
         $this->createQuizRecord(
@@ -1991,7 +1996,7 @@ class SubtypeModelTest extends TestCase
      * Test that subtype relationships take precedence over parent relationships.
      * If both parent and subtype define the same relationship method, subtype wins.
      */
-    public function testSubtypeRelationshipTakesPrecedence(): void
+    public function test_subtype_relationship_takes_precedence(): void
     {
         // Create quiz with questions (subtype relationship)
         $this->createQuizRecord(
@@ -2019,7 +2024,7 @@ class SubtypeModelTest extends TestCase
      * Test that calling undefined methods on parent doesn't cause infinite recursion.
      * Should throw BadMethodCallException as expected.
      */
-    public function testUndefinedMethodThrowsException(): void
+    public function test_undefined_method_throws_exception(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'My Quiz', 'type_id' => 1],
@@ -2037,7 +2042,7 @@ class SubtypeModelTest extends TestCase
      * NOTE: This is currently a known limitation - eager loading parent relationships
      * may not work perfectly without explicit with() on the query builder.
      */
-    public function testSubtypeRelationshipsStillWorkAfterParentProxying(): void
+    public function test_subtype_relationships_still_work_after_parent_proxying(): void
     {
         // Create quiz with both parent (tags) and subtype (questions) relationships
         $this->createQuizRecord(
@@ -2073,7 +2078,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test whereNull on a subtype column triggers the join.
      */
-    public function testWhereNullWithSubtypeColumn(): void
+    public function test_where_null_with_subtype_column(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'type_id' => 1],
@@ -2093,7 +2098,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test whereNotNull on a subtype column triggers the join.
      */
-    public function testWhereNotNullWithSubtypeColumn(): void
+    public function test_where_not_null_with_subtype_column(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'type_id' => 1],
@@ -2113,7 +2118,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test whereColumn with a subtype column triggers the join.
      */
-    public function testWhereColumnWithSubtypeColumn(): void
+    public function test_where_column_with_subtype_column(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'type_id' => 1],
@@ -2133,7 +2138,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test subtypeHasOne relationship.
      */
-    public function testSubtypeHasOneRelationship(): void
+    public function test_subtype_has_one_relationship(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Test Quiz', 'type_id' => 1],
@@ -2158,7 +2163,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test subtypeHasOne returns null when no related record exists.
      */
-    public function testSubtypeHasOneReturnsNullWhenNoRelated(): void
+    public function test_subtype_has_one_returns_null_when_no_related(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Test Quiz', 'type_id' => 1],
@@ -2174,7 +2179,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test subtypeBelongsTo relationship.
      */
-    public function testSubtypeBelongsToRelationship(): void
+    public function test_subtype_belongs_to_relationship(): void
     {
         DB::table('quiz_categories')->insert(['id' => 1, 'name' => 'Mathematics']);
 
@@ -2194,7 +2199,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test subtypeBelongsTo returns null when foreign key is null.
      */
-    public function testSubtypeBelongsToReturnsNullWhenForeignKeyNull(): void
+    public function test_subtype_belongs_to_returns_null_when_foreign_key_null(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Quiz', 'type_id' => 1],
@@ -2210,7 +2215,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test subtypeBelongsToMany relationship.
      */
-    public function testSubtypeBelongsToManyRelationship(): void
+    public function test_subtype_belongs_to_many_relationship(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Test Quiz', 'type_id' => 1],
@@ -2238,7 +2243,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test subtypeBelongsToMany with empty pivot.
      */
-    public function testSubtypeBelongsToManyWithNoPivotRecords(): void
+    public function test_subtype_belongs_to_many_with_no_pivot_records(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Test Quiz', 'type_id' => 1],
@@ -2254,7 +2259,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test SubtypeException::missingTable() is thrown correctly.
      */
-    public function testMissingTableExceptionPath(): void
+    public function test_missing_table_exception_path(): void
     {
         $this->expectException(SubtypeException::class);
         $this->expectExceptionMessage('Subtype table must be defined.');
@@ -2265,7 +2270,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test SubtypeException::missingTypeId() is thrown correctly.
      */
-    public function testMissingTypeIdExceptionPath(): void
+    public function test_missing_type_id_exception_path(): void
     {
         $this->expectException(SubtypeException::class);
         $this->expectExceptionMessage('Missing type ID for model Pannella\Cti\Tests\Fixtures\Quiz');
@@ -2276,7 +2281,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test SubtypeException::saveFailed() is thrown correctly.
      */
-    public function testSaveFailedExceptionPath(): void
+    public function test_save_failed_exception_path(): void
     {
         $this->expectException(SubtypeException::class);
         $this->expectExceptionMessage('Failed to save subtype data to table: assessment_quiz');
@@ -2287,9 +2292,9 @@ class SubtypeModelTest extends TestCase
     /**
      * Test BootsSubtypeModel does NOT override a manually-set type_id.
      */
-    public function testBootsSubtypeModelDoesNotOverridePresetTypeId(): void
+    public function test_boots_subtype_model_does_not_override_preset_type_id(): void
     {
-        $quiz = new Quiz();
+        $quiz = new Quiz;
         $quiz->type_id = 1; // Manually set type_id
         $quiz->title = 'Manually Typed Quiz';
         $quiz->passing_score = 70;
@@ -2303,7 +2308,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test mixed-type batch loading uses 1 query per subtype table.
      */
-    public function testMixedTypeBatchLoadingEfficiency(): void
+    public function test_mixed_type_batch_loading_efficiency(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Quiz 1', 'type_id' => 1],
@@ -2344,7 +2349,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test save with no changes does not generate unnecessary UPDATE queries.
      */
-    public function testSaveWithNoChanges(): void
+    public function test_save_with_no_changes(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Test Quiz', 'type_id' => 1],
@@ -2360,8 +2365,7 @@ class SubtypeModelTest extends TestCase
         $this->assertTrue($result);
 
         // Should not have UPDATE queries for the subtype table since nothing changed
-        $subtypeUpdates = array_filter($queryLog, fn ($q) =>
-            strpos($q['query'], 'update') !== false
+        $subtypeUpdates = array_filter($queryLog, fn ($q) => strpos($q['query'], 'update') !== false
             && strpos($q['query'], 'assessment_quiz') !== false
         );
         $this->assertCount(0, $subtypeUpdates, 'Should not UPDATE subtype table when nothing changed');
@@ -2370,7 +2374,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test deleting a model that has no subtype record (parent-only row).
      */
-    public function testDeleteModelWithNoSubtypeRecord(): void
+    public function test_delete_model_with_no_subtype_record(): void
     {
         // Create parent record without subtype record
         DB::table('assessment')->insert([
@@ -2393,7 +2397,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test replicate with $except parameter excludes specified attributes.
      */
-    public function testReplicateWithExceptParameter(): void
+    public function test_replicate_with_except_parameter(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Original Quiz', 'type_id' => 1],
@@ -2414,7 +2418,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test chained query builder with multiple subtype columns adds join only once.
      */
-    public function testChainedQueryBuilderAddsJoinOnce(): void
+    public function test_chained_query_builder_adds_join_once(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'type_id' => 1],
@@ -2442,7 +2446,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test whereIn on subtype column.
      */
-    public function testWhereInWithSubtypeColumn(): void
+    public function test_where_in_with_subtype_column(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'type_id' => 1],
@@ -2468,7 +2472,7 @@ class SubtypeModelTest extends TestCase
      * Test subtype-specific casts are applied.
      * The Quiz model stores passing_score as integer and show_correct_answers as boolean-like.
      */
-    public function testSubtypeSpecificCasts(): void
+    public function test_subtype_specific_casts(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Cast Test', 'type_id' => 1],
@@ -2489,7 +2493,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test toArray includes both parent and subtype attributes.
      */
-    public function testToArrayIncludesBothParentAndSubtypeAttributes(): void
+    public function test_to_array_includes_both_parent_and_subtype_attributes(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Array Test', 'type_id' => 1, 'description' => 'A description'],
@@ -2514,7 +2518,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test toJson includes both parent and subtype attributes.
      */
-    public function testToJsonIncludesBothParentAndSubtypeAttributes(): void
+    public function test_to_json_includes_both_parent_and_subtype_attributes(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'JSON Test', 'type_id' => 1],
@@ -2534,7 +2538,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test collection pluck on subtype attribute works.
      */
-    public function testCollectionPluckSubtypeAttribute(): void
+    public function test_collection_pluck_subtype_attribute(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'type_id' => 1],
@@ -2570,12 +2574,12 @@ class SubtypeModelTest extends TestCase
     /**
      * Test that overlapping columns throw SubtypeException on save().
      */
-    public function testOverlappingColumnsThrowOnSave(): void
+    public function test_overlapping_columns_throw_on_save(): void
     {
         $this->expectException(SubtypeException::class);
         $this->expectExceptionMessage('overlap with parent table columns: title');
 
-        $model = new OverlappingColumnsQuiz();
+        $model = new OverlappingColumnsQuiz;
         $model->title = 'Test';
         $model->passing_score = 80;
         $model->save();
@@ -2584,12 +2588,12 @@ class SubtypeModelTest extends TestCase
     /**
      * Test that overlapping columns throw SubtypeException on loadSubtypeData().
      */
-    public function testOverlappingColumnsThrowOnLoadSubtypeData(): void
+    public function test_overlapping_columns_throw_on_load_subtype_data(): void
     {
         $this->expectException(SubtypeException::class);
         $this->expectExceptionMessage('overlap with parent table columns: title');
 
-        $model = new OverlappingColumnsQuiz();
+        $model = new OverlappingColumnsQuiz;
         $model->id = 1;
         $model->exists = true;
         $model->loadSubtypeData();
@@ -2598,9 +2602,9 @@ class SubtypeModelTest extends TestCase
     /**
      * Test that non-overlapping columns pass validation without error.
      */
-    public function testNonOverlappingColumnsPassValidation(): void
+    public function test_non_overlapping_columns_pass_validation(): void
     {
-        $quiz = new Quiz();
+        $quiz = new Quiz;
         $quiz->title = 'Valid Quiz';
         $quiz->passing_score = 80;
 
@@ -2612,19 +2616,18 @@ class SubtypeModelTest extends TestCase
     /**
      * Test that validation result is cached (schema query runs only once).
      */
-    public function testValidationResultIsCached(): void
+    public function test_validation_result_is_cached(): void
     {
         DB::connection()->enableQueryLog();
 
         // First save triggers validation (schema query)
-        $quiz1 = new Quiz();
+        $quiz1 = new Quiz;
         $quiz1->title = 'Quiz 1';
         $quiz1->passing_score = 80;
         $quiz1->save();
 
         $logAfterFirst = DB::connection()->getQueryLog();
-        $schemaQueriesFirst = array_filter($logAfterFirst, fn ($q) =>
-            stripos($q['query'], 'pragma') !== false
+        $schemaQueriesFirst = array_filter($logAfterFirst, fn ($q) => stripos($q['query'], 'pragma') !== false
             || stripos($q['query'], 'column_listing') !== false
             || stripos($q['query'], 'information_schema') !== false
             || stripos($q['query'], 'table_info') !== false
@@ -2636,14 +2639,13 @@ class SubtypeModelTest extends TestCase
         DB::connection()->enableQueryLog();
 
         // Second save should use cache — no additional schema queries
-        $quiz2 = new Quiz();
+        $quiz2 = new Quiz;
         $quiz2->title = 'Quiz 2';
         $quiz2->passing_score = 90;
         $quiz2->save();
 
         $logAfterSecond = DB::connection()->getQueryLog();
-        $schemaQueriesSecond = array_filter($logAfterSecond, fn ($q) =>
-            stripos($q['query'], 'pragma') !== false
+        $schemaQueriesSecond = array_filter($logAfterSecond, fn ($q) => stripos($q['query'], 'pragma') !== false
             || stripos($q['query'], 'column_listing') !== false
             || stripos($q['query'], 'information_schema') !== false
             || stripos($q['query'], 'table_info') !== false
@@ -2657,12 +2659,15 @@ class SubtypeModelTest extends TestCase
     /**
      * Test that validation is skipped gracefully when schema check fails.
      */
-    public function testValidationSkipsGracefullyOnSchemaFailure(): void
+    public function test_validation_skips_gracefully_on_schema_failure(): void
     {
         // Create an anonymous subtype model pointing to a non-existent table
-        $model = new class extends SubtypeModel {
+        $model = new class extends SubtypeModel
+        {
             protected $table = 'nonexistent_parent_table';
+
             protected $subtypeTable = 'nonexistent_subtype_table';
+
             protected $subtypeAttributes = ['some_column'];
         };
 
@@ -2674,7 +2679,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test SubtypeException::overlappingColumns() message format.
      */
-    public function testOverlappingColumnsExceptionMessage(): void
+    public function test_overlapping_columns_exception_message(): void
     {
         $exception = SubtypeException::overlappingColumns('App\\Models\\Foo', ['title', 'description']);
 
@@ -2687,12 +2692,12 @@ class SubtypeModelTest extends TestCase
     /**
      * Test that Quiz::all() only returns quizzes, not surveys.
      */
-    public function testQuizQueryOnlyReturnsQuizzes(): void
+    public function test_quiz_query_only_returns_quizzes(): void
     {
         // Create 2 quizzes
         $this->createQuizRecord(['id' => 1, 'type_id' => 1, 'title' => 'Quiz 1'], ['assessment_id' => 1]);
         $this->createQuizRecord(['id' => 2, 'type_id' => 1, 'title' => 'Quiz 2'], ['assessment_id' => 2]);
-        
+
         // Create 2 surveys
         $this->createSurveyRecord(['id' => 3, 'type_id' => 2, 'title' => 'Survey 1'], ['assessment_id' => 3]);
         $this->createSurveyRecord(['id' => 4, 'type_id' => 2, 'title' => 'Survey 2'], ['assessment_id' => 4]);
@@ -2709,12 +2714,12 @@ class SubtypeModelTest extends TestCase
     /**
      * Test that Survey::all() only returns surveys, not quizzes.
      */
-    public function testSurveyQueryOnlyReturnsSurveys(): void
+    public function test_survey_query_only_returns_surveys(): void
     {
         // Create 2 quizzes
         $this->createQuizRecord(['id' => 1, 'type_id' => 1, 'title' => 'Quiz 1'], ['assessment_id' => 1]);
         $this->createQuizRecord(['id' => 2, 'type_id' => 1, 'title' => 'Quiz 2'], ['assessment_id' => 2]);
-        
+
         // Create 2 surveys
         $this->createSurveyRecord(['id' => 3, 'type_id' => 2, 'title' => 'Survey 1'], ['assessment_id' => 3]);
         $this->createSurveyRecord(['id' => 4, 'type_id' => 2, 'title' => 'Survey 2'], ['assessment_id' => 4]);
@@ -2731,12 +2736,12 @@ class SubtypeModelTest extends TestCase
     /**
      * Test that Assessment::all() returns all assessments (both quizzes and surveys).
      */
-    public function testAssessmentQueryReturnsAllTypes(): void
+    public function test_assessment_query_returns_all_types(): void
     {
         // Create 2 quizzes
         $this->createQuizRecord(['id' => 1, 'type_id' => 1, 'title' => 'Quiz 1'], ['assessment_id' => 1]);
         $this->createQuizRecord(['id' => 2, 'type_id' => 1, 'title' => 'Quiz 2'], ['assessment_id' => 2]);
-        
+
         // Create 2 surveys
         $this->createSurveyRecord(['id' => 3, 'type_id' => 2, 'title' => 'Survey 1'], ['assessment_id' => 3]);
         $this->createSurveyRecord(['id' => 4, 'type_id' => 2, 'title' => 'Survey 2'], ['assessment_id' => 4]);
@@ -2745,7 +2750,7 @@ class SubtypeModelTest extends TestCase
 
         // Parent model should return all records
         $this->assertCount(4, $assessments);
-        
+
         // Check that they're morphed into the correct subtype classes
         $this->assertInstanceOf(Quiz::class, $assessments[0]);
         $this->assertInstanceOf(Quiz::class, $assessments[1]);
@@ -2756,10 +2761,10 @@ class SubtypeModelTest extends TestCase
     /**
      * Test that Quiz pagination only returns quizzes.
      */
-    public function testQuizPaginationOnlyReturnsQuizzes(): void
+    public function test_quiz_pagination_only_returns_quizzes(): void
     {
         $this->markTestSkipped('Pagination requires additional setup in test environment');
-        
+
         // Create 5 quizzes
         for ($i = 1; $i <= 5; $i++) {
             $this->createQuizRecord(
@@ -2767,11 +2772,11 @@ class SubtypeModelTest extends TestCase
                 ['assessment_id' => $i]
             );
         }
-        
+
         // Create 3 surveys
         for ($i = 6; $i <= 8; $i++) {
             $this->createSurveyRecord(
-                ['id' => $i, 'type_id' => 2, 'title' => "Survey " . ($i - 5)],
+                ['id' => $i, 'type_id' => 2, 'title' => 'Survey '.($i - 5)],
                 ['assessment_id' => $i]
             );
         }
@@ -2781,7 +2786,7 @@ class SubtypeModelTest extends TestCase
         $this->assertEquals(5, $paginator->total());
         $this->assertCount(3, $paginator);
         $this->assertContainsOnlyInstancesOf(Quiz::class, $paginator->items());
-        
+
         // Verify all results are quizzes
         foreach ($paginator->items() as $item) {
             $this->assertEquals(1, $item->type_id);
@@ -2791,18 +2796,18 @@ class SubtypeModelTest extends TestCase
     /**
      * Test that discriminator scope can be removed with withoutGlobalScope().
      */
-    public function testWithoutGlobalScopeReturnsAllRecords(): void
+    public function test_without_global_scope_returns_all_records(): void
     {
         // Create 2 quizzes
         $this->createQuizRecord(['id' => 1, 'type_id' => 1, 'title' => 'Quiz 1'], ['assessment_id' => 1]);
         $this->createQuizRecord(['id' => 2, 'type_id' => 1, 'title' => 'Quiz 2'], ['assessment_id' => 2]);
-        
+
         // Create 2 surveys
         $this->createSurveyRecord(['id' => 3, 'type_id' => 2, 'title' => 'Survey 1'], ['assessment_id' => 3]);
         $this->createSurveyRecord(['id' => 4, 'type_id' => 2, 'title' => 'Survey 2'], ['assessment_id' => 4]);
 
         // Query without the discriminator scope should return all records
-        $allRecords = Quiz::withoutGlobalScope(\Pannella\Cti\Support\SubtypeDiscriminatorScope::class)->get();
+        $allRecords = Quiz::withoutGlobalScope(SubtypeDiscriminatorScope::class)->get();
 
         $this->assertCount(4, $allRecords);
     }
@@ -2810,13 +2815,13 @@ class SubtypeModelTest extends TestCase
     /**
      * Test that discriminator filtering works with other where clauses.
      */
-    public function testDiscriminatorFilteringWorksWithOtherClauses(): void
+    public function test_discriminator_filtering_works_with_other_clauses(): void
     {
         // Create 3 quizzes with different titles
         $this->createQuizRecord(['id' => 1, 'type_id' => 1, 'title' => 'Final Exam'], ['assessment_id' => 1]);
         $this->createQuizRecord(['id' => 2, 'type_id' => 1, 'title' => 'Midterm Exam'], ['assessment_id' => 2]);
         $this->createQuizRecord(['id' => 3, 'type_id' => 1, 'title' => 'Pop Quiz'], ['assessment_id' => 3]);
-        
+
         // Create a survey with "Exam" in title
         $this->createSurveyRecord(['id' => 4, 'type_id' => 2, 'title' => 'Final Exam Survey'], ['assessment_id' => 4]);
 
@@ -2832,13 +2837,13 @@ class SubtypeModelTest extends TestCase
     /**
      * Test that discriminator filtering works with query builder aggregates.
      */
-    public function testDiscriminatorFilteringWorksWithCount(): void
+    public function test_discriminator_filtering_works_with_count(): void
     {
         // Create 3 quizzes
         $this->createQuizRecord(['id' => 1, 'type_id' => 1], ['assessment_id' => 1]);
         $this->createQuizRecord(['id' => 2, 'type_id' => 1], ['assessment_id' => 2]);
         $this->createQuizRecord(['id' => 3, 'type_id' => 1], ['assessment_id' => 3]);
-        
+
         // Create 2 surveys
         $this->createSurveyRecord(['id' => 4, 'type_id' => 2], ['assessment_id' => 4]);
         $this->createSurveyRecord(['id' => 5, 'type_id' => 2], ['assessment_id' => 5]);
@@ -2855,11 +2860,11 @@ class SubtypeModelTest extends TestCase
     /**
      * Test that find() respects discriminator filtering.
      */
-    public function testFindRespectsDiscriminatorFiltering(): void
+    public function test_find_respects_discriminator_filtering(): void
     {
         // Create a quiz with id 1
         $this->createQuizRecord(['id' => 1, 'type_id' => 1, 'title' => 'Quiz 1'], ['assessment_id' => 1]);
-        
+
         // Create a survey with id 2
         $this->createSurveyRecord(['id' => 2, 'type_id' => 2, 'title' => 'Survey 1'], ['assessment_id' => 2]);
 
@@ -2888,7 +2893,7 @@ class SubtypeModelTest extends TestCase
      * Test that delete() is wrapped in a transaction — subtype row is preserved
      * if parent delete fails.
      */
-    public function testDeleteTransactionRollback(): void
+    public function test_delete_transaction_rollback(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Transaction Test', 'type_id' => 1],
@@ -2917,7 +2922,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test that subtypeDeleted fires AFTER parent::delete(), not before.
      */
-    public function testSubtypeDeletedEventFiresAfterParentDelete(): void
+    public function test_subtype_deleted_event_fires_after_parent_delete(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Event Order Test', 'type_id' => 1],
@@ -2942,10 +2947,10 @@ class SubtypeModelTest extends TestCase
     /**
      * Test upsert behavior: saving a new record inserts, saving again updates.
      */
-    public function testUpsertBehaviorForNewAndExistingRecords(): void
+    public function test_upsert_behavior_for_new_and_existing_records(): void
     {
         // Create new — should insert
-        $quiz = new Quiz();
+        $quiz = new Quiz;
         $quiz->title = 'Upsert Test';
         $quiz->passing_score = 70;
         $quiz->time_limit = 30;
@@ -2970,17 +2975,21 @@ class SubtypeModelTest extends TestCase
     /**
      * Test that a misconfigured subtype (null type ID) returns empty results, not all records.
      */
-    public function testMisconfiguredSubtypeReturnsEmptyResults(): void
+    public function test_misconfigured_subtype_returns_empty_results(): void
     {
         // Create records in the parent table
         $this->createQuizRecord(['id' => 1, 'type_id' => 1, 'title' => 'Quiz 1'], ['assessment_id' => 1]);
         $this->createSurveyRecord(['id' => 2, 'type_id' => 2, 'title' => 'Survey 1'], ['assessment_id' => 2]);
 
         // Create an anonymous subtype that can't be resolved (no matching label in subtypeMap)
-        $model = new class extends SubtypeModel {
+        $model = new class extends SubtypeModel
+        {
             protected $table = 'assessment';
+
             protected $subtypeTable = 'assessment_quiz';
+
             protected $subtypeAttributes = ['passing_score'];
+
             protected $ctiParentClass = Assessment::class;
 
             // Override to return a class not in the subtypeMap
@@ -2992,7 +3001,7 @@ class SubtypeModelTest extends TestCase
 
         // When discriminator scope resolves null, it should add WHERE 1=0
         // effectively returning empty results
-        $scope = new \Pannella\Cti\Support\SubtypeDiscriminatorScope();
+        $scope = new SubtypeDiscriminatorScope;
         $builder = $model->newQuery();
 
         // The scope should have been applied via boot, but for anonymous class
@@ -3007,7 +3016,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test LEFT JOIN: parent records without subtype data appear in whereNull queries.
      */
-    public function testLeftJoinOrphanParentAppearsInWhereNull(): void
+    public function test_left_join_orphan_parent_appears_in_where_null(): void
     {
         // Create a quiz with subtype data
         $this->createQuizRecord(
@@ -3033,7 +3042,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test collection with all-null subtype attributes loads correctly.
      */
-    public function testCollectionWithAllNullSubtypeAttributesLoadsCorrectly(): void
+    public function test_collection_with_all_null_subtype_attributes_loads_correctly(): void
     {
         // Create quiz records with all-null subtype values
         DB::table('assessment')->insert([
@@ -3065,7 +3074,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test that save doesn't issue an unnecessary parent SELECT (Phase 2.1).
      */
-    public function testSaveDoesNotIssueUnnecessaryParentSelect(): void
+    public function test_save_does_not_issue_unnecessary_parent_select(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Query Count Test', 'type_id' => 1],
@@ -3083,8 +3092,7 @@ class SubtypeModelTest extends TestCase
         $queryLog = DB::connection()->getQueryLog();
 
         // Should NOT have a SELECT on the parent table to reload data
-        $parentSelects = array_filter($queryLog, fn ($q) =>
-            stripos($q['query'], 'select') !== false
+        $parentSelects = array_filter($queryLog, fn ($q) => stripos($q['query'], 'select') !== false
             && stripos($q['query'], '"assessment"') !== false
             && stripos($q['query'], 'assessment_quiz') === false
             && stripos($q['query'], 'assessment_type') === false
@@ -3096,10 +3104,10 @@ class SubtypeModelTest extends TestCase
     /**
      * Test that multiple creates only query the lookup table once (Phase 2.2).
      */
-    public function testMultipleCreatesOnlyQueryLookupTableOnce(): void
+    public function test_multiple_creates_only_query_lookup_table_once(): void
     {
         // First create primes the cache
-        $quiz1 = new Quiz();
+        $quiz1 = new Quiz;
         $quiz1->title = 'Quiz 1';
         $quiz1->passing_score = 70;
         $quiz1->save();
@@ -3108,15 +3116,14 @@ class SubtypeModelTest extends TestCase
         DB::connection()->enableQueryLog();
 
         // Second create should use the cached type ID
-        $quiz2 = new Quiz();
+        $quiz2 = new Quiz;
         $quiz2->title = 'Quiz 2';
         $quiz2->passing_score = 80;
         $quiz2->save();
 
         $queryLog = DB::connection()->getQueryLog();
 
-        $lookupQueries = array_filter($queryLog, fn ($q) =>
-            stripos($q['query'], 'assessment_type') !== false
+        $lookupQueries = array_filter($queryLog, fn ($q) => stripos($q['query'], 'assessment_type') !== false
         );
 
         $this->assertCount(0, $lookupQueries, 'Second create should not query the lookup table (cached)');
@@ -3125,7 +3132,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test eager loading parent relationships via __call proxy.
      */
-    public function testEagerLoadingParentRelationshipsViaProxy(): void
+    public function test_eager_loading_parent_relationships_via_proxy(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'title' => 'Quiz 1', 'type_id' => 1],
@@ -3154,7 +3161,7 @@ class SubtypeModelTest extends TestCase
      * Note: cursor() bypasses newCollection(), so subtype data must be loaded
      * individually via newInstance()/loadSubtypeData().
      */
-    public function testCursorIterationWithSubtypeModels(): void
+    public function test_cursor_iteration_with_subtype_models(): void
     {
         $this->createQuizRecord(['id' => 1, 'type_id' => 1, 'title' => 'Quiz 1'], ['assessment_id' => 1, 'passing_score' => 70]);
         $this->createQuizRecord(['id' => 2, 'type_id' => 1, 'title' => 'Quiz 2'], ['assessment_id' => 2, 'passing_score' => 80]);
@@ -3177,9 +3184,9 @@ class SubtypeModelTest extends TestCase
     /**
      * Test isSubtypeDataLoaded flag is set correctly.
      */
-    public function testSubtypeDataLoadedFlag(): void
+    public function test_subtype_data_loaded_flag(): void
     {
-        $quiz = new Quiz();
+        $quiz = new Quiz;
         $this->assertFalse($quiz->isSubtypeDataLoaded());
 
         $quiz->title = 'Flag Test';
@@ -3201,7 +3208,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test orWhereIn with a subtype column triggers the join.
      */
-    public function testOrWhereInWithSubtypeColumn(): void
+    public function test_or_where_in_with_subtype_column(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'type_id' => 1, 'title' => 'Quiz A'],
@@ -3226,7 +3233,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test orWhereNull with a subtype column triggers the join.
      */
-    public function testOrWhereNullWithSubtypeColumn(): void
+    public function test_or_where_null_with_subtype_column(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'type_id' => 1, 'title' => 'Quiz A'],
@@ -3250,7 +3257,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test orWhereBetween with a subtype column triggers the join.
      */
-    public function testOrWhereBetweenWithSubtypeColumn(): void
+    public function test_or_where_between_with_subtype_column(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'type_id' => 1, 'title' => 'Quiz A'],
@@ -3275,7 +3282,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test whereNotBetween with a subtype column triggers the join.
      */
-    public function testWhereNotBetweenWithSubtypeColumn(): void
+    public function test_where_not_between_with_subtype_column(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'type_id' => 1],
@@ -3300,7 +3307,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test orWhereColumn with subtype columns triggers the join.
      */
-    public function testOrWhereColumnWithSubtypeColumn(): void
+    public function test_or_where_column_with_subtype_column(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'type_id' => 1, 'title' => 'Quiz A'],
@@ -3326,7 +3333,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test orderByDesc method (not orderBy with 'desc') with a subtype column.
      */
-    public function testOrderByDescWithSubtypeColumnMethod(): void
+    public function test_order_by_desc_with_subtype_column_method(): void
     {
         $this->createQuizRecord(['id' => 1, 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 90]);
         $this->createQuizRecord(['id' => 2, 'type_id' => 1], ['assessment_id' => 2, 'passing_score' => 70]);
@@ -3341,7 +3348,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test addSelect with a subtype column triggers the join.
      */
-    public function testAddSelectWithSubtypeColumn(): void
+    public function test_add_select_with_subtype_column(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'type_id' => 1, 'title' => 'Quiz A'],
@@ -3363,7 +3370,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test latest() with a subtype column triggers the join.
      */
-    public function testLatestWithSubtypeColumn(): void
+    public function test_latest_with_subtype_column(): void
     {
         $this->createQuizRecord(['id' => 1, 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 70]);
         $this->createQuizRecord(['id' => 2, 'type_id' => 1], ['assessment_id' => 2, 'passing_score' => 90]);
@@ -3378,7 +3385,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test oldest() with a subtype column triggers the join.
      */
-    public function testOldestWithSubtypeColumn(): void
+    public function test_oldest_with_subtype_column(): void
     {
         $this->createQuizRecord(['id' => 1, 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 90]);
         $this->createQuizRecord(['id' => 2, 'type_id' => 1], ['assessment_id' => 2, 'passing_score' => 70]);
@@ -3393,7 +3400,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test pluck() on a subtype column triggers the join.
      */
-    public function testPluckOnSubtypeColumn(): void
+    public function test_pluck_on_subtype_column(): void
     {
         $this->createQuizRecord(['id' => 1, 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 80]);
         $this->createQuizRecord(['id' => 2, 'type_id' => 1], ['assessment_id' => 2, 'passing_score' => 90]);
@@ -3407,7 +3414,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test value() on a subtype column triggers the join.
      */
-    public function testValueOnSubtypeColumn(): void
+    public function test_value_on_subtype_column(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'type_id' => 1],
@@ -3426,7 +3433,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test mass update of subtype columns only.
      */
-    public function testMassUpdateSubtypeColumns(): void
+    public function test_mass_update_subtype_columns(): void
     {
         $this->createQuizRecord(['id' => 1, 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 70]);
         $this->createQuizRecord(['id' => 2, 'type_id' => 1], ['assessment_id' => 2, 'passing_score' => 80]);
@@ -3440,7 +3447,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test mass update with both parent and subtype columns.
      */
-    public function testMassUpdateMixedColumns(): void
+    public function test_mass_update_mixed_columns(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'type_id' => 1, 'title' => 'Old Title'],
@@ -3456,7 +3463,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test mass update of parent-only columns (unchanged behavior).
      */
-    public function testMassUpdateParentOnlyColumns(): void
+    public function test_mass_update_parent_only_columns(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'type_id' => 1, 'title' => 'Old Title'],
@@ -3473,7 +3480,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test increment on a subtype column.
      */
-    public function testIncrementSubtypeColumn(): void
+    public function test_increment_subtype_column(): void
     {
         $this->createQuizRecord(['id' => 1, 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 70]);
         $this->createQuizRecord(['id' => 2, 'type_id' => 1], ['assessment_id' => 2, 'passing_score' => 80]);
@@ -3487,7 +3494,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test decrement on a subtype column.
      */
-    public function testDecrementSubtypeColumn(): void
+    public function test_decrement_subtype_column(): void
     {
         $this->createQuizRecord(['id' => 1, 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 80]);
 
@@ -3529,7 +3536,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test that soft delete preserves the subtype row.
      */
-    public function testSoftDeletePreservesSubtypeRow(): void
+    public function test_soft_delete_preserves_subtype_row(): void
     {
         $this->createSoftDeletableQuizRecord();
 
@@ -3553,7 +3560,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test that force delete removes the subtype row.
      */
-    public function testForceDeleteRemovesSubtypeRow(): void
+    public function test_force_delete_removes_subtype_row(): void
     {
         $this->createSoftDeletableQuizRecord();
 
@@ -3574,7 +3581,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test that restore after soft delete works correctly.
      */
-    public function testRestoreAfterSoftDelete(): void
+    public function test_restore_after_soft_delete(): void
     {
         $this->createSoftDeletableQuizRecord();
 
@@ -3606,7 +3613,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test that hard delete (non-SoftDeletes model) still removes subtype row (regression).
      */
-    public function testHardDeleteStillRemovesSubtypeRow(): void
+    public function test_hard_delete_still_removes_subtype_row(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'type_id' => 1, 'title' => 'Hard Delete Quiz'],
@@ -3629,7 +3636,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test orWhereNotIn with a subtype column triggers the join.
      */
-    public function testOrWhereNotInWithSubtypeColumn(): void
+    public function test_or_where_not_in_with_subtype_column(): void
     {
         $this->createQuizRecord(['id' => 1, 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 60]);
         $this->createQuizRecord(['id' => 2, 'type_id' => 1], ['assessment_id' => 2, 'passing_score' => 80]);
@@ -3645,7 +3652,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test orWhereNotNull with a subtype column triggers the join.
      */
-    public function testOrWhereNotNullWithSubtypeColumn(): void
+    public function test_or_where_not_null_with_subtype_column(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'type_id' => 1],
@@ -3665,7 +3672,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test orWhereNotBetween with a subtype column triggers the join.
      */
-    public function testOrWhereNotBetweenWithSubtypeColumn(): void
+    public function test_or_where_not_between_with_subtype_column(): void
     {
         $this->createQuizRecord(['id' => 1, 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 50]);
         $this->createQuizRecord(['id' => 2, 'type_id' => 1], ['assessment_id' => 2, 'passing_score' => 75]);
@@ -3684,7 +3691,7 @@ class SubtypeModelTest extends TestCase
      * Uses time_limit as a stand-in since SQLite doesn't have real date columns on subtype.
      * We just verify the join is added and the query doesn't error.
      */
-    public function testWhereDateViaCallDoesNotError(): void
+    public function test_where_date_via_call_does_not_error(): void
     {
         $this->createQuizRecord(['id' => 1, 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 80]);
 
@@ -3696,7 +3703,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test whereYear with a subtype column triggers the join via __call.
      */
-    public function testWhereYearViaCallDoesNotError(): void
+    public function test_where_year_via_call_does_not_error(): void
     {
         $this->createQuizRecord(['id' => 1, 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 80]);
 
@@ -3708,7 +3715,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test whereMonth via __call.
      */
-    public function testWhereMonthViaCallDoesNotError(): void
+    public function test_where_month_via_call_does_not_error(): void
     {
         $this->createQuizRecord(['id' => 1, 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 80]);
 
@@ -3719,7 +3726,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test whereDay via __call.
      */
-    public function testWhereDayViaCallDoesNotError(): void
+    public function test_where_day_via_call_does_not_error(): void
     {
         $this->createQuizRecord(['id' => 1, 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 80]);
 
@@ -3730,7 +3737,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test __call passthrough for non-column-bearing methods still works.
      */
-    public function testCallPassthroughForUnmappedMethods(): void
+    public function test_call_passthrough_for_unmapped_methods(): void
     {
         $this->createQuizRecord(['id' => 1, 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 80]);
         $this->createQuizRecord(['id' => 2, 'type_id' => 1], ['assessment_id' => 2, 'passing_score' => 90]);
@@ -3743,7 +3750,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test chaining multiple forwarded methods together.
      */
-    public function testChainingMultipleForwardedMethods(): void
+    public function test_chaining_multiple_forwarded_methods(): void
     {
         $this->createQuizRecord(['id' => 1, 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 60, 'time_limit' => 30]);
         $this->createQuizRecord(['id' => 2, 'type_id' => 1], ['assessment_id' => 2, 'passing_score' => 80, 'time_limit' => null]);
@@ -3760,7 +3767,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test __call with parent column does not add unnecessary join.
      */
-    public function testCallWithParentColumnNoJoin(): void
+    public function test_call_with_parent_column_no_join(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'type_id' => 1, 'title' => 'Quiz A'],
@@ -3781,7 +3788,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test pluck with subtype column as key parameter.
      */
-    public function testPluckWithSubtypeColumnAsKey(): void
+    public function test_pluck_with_subtype_column_as_key(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'type_id' => 1, 'title' => 'Quiz A'],
@@ -3802,7 +3809,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test latest() with default column (created_at, no arg).
      */
-    public function testLatestWithDefaultColumn(): void
+    public function test_latest_with_default_column(): void
     {
         $this->createQuizRecord(['id' => 1, 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 80]);
 
@@ -3814,7 +3821,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test oldest() with default column (created_at, no arg).
      */
-    public function testOldestWithDefaultColumn(): void
+    public function test_oldest_with_default_column(): void
     {
         $this->createQuizRecord(['id' => 1, 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 80]);
 
@@ -3825,7 +3832,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test value() returns null when no rows match.
      */
-    public function testValueReturnsNullWhenNoMatch(): void
+    public function test_value_returns_null_when_no_match(): void
     {
         $result = Quiz::where('id', 999)->value('passing_score');
         $this->assertNull($result);
@@ -3834,7 +3841,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test pluck on subtype column with where filter.
      */
-    public function testPluckOnSubtypeColumnWithFilter(): void
+    public function test_pluck_on_subtype_column_with_filter(): void
     {
         $this->createQuizRecord(['id' => 1, 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 80]);
         $this->createQuizRecord(['id' => 2, 'type_id' => 1], ['assessment_id' => 2, 'passing_score' => 90]);
@@ -3853,7 +3860,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test mass update with multiple subtype columns at once.
      */
-    public function testMassUpdateMultipleSubtypeColumns(): void
+    public function test_mass_update_multiple_subtype_columns(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'type_id' => 1],
@@ -3870,7 +3877,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test mass update with no matching rows returns zero.
      */
-    public function testMassUpdateNoMatchingRows(): void
+    public function test_mass_update_no_matching_rows(): void
     {
         $this->createQuizRecord(['id' => 1, 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 70]);
 
@@ -3884,7 +3891,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test mass update affects only matching rows, not all rows.
      */
-    public function testMassUpdateOnlyAffectsMatchingRows(): void
+    public function test_mass_update_only_affects_matching_rows(): void
     {
         $this->createQuizRecord(['id' => 1, 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 60]);
         $this->createQuizRecord(['id' => 2, 'type_id' => 1], ['assessment_id' => 2, 'passing_score' => 80]);
@@ -3900,7 +3907,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test increment on a parent column (unchanged behavior, no subtype involvement).
      */
-    public function testIncrementParentColumn(): void
+    public function test_increment_parent_column(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'type_id' => 1, 'enabled' => 0],
@@ -3917,7 +3924,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test decrement on a parent column (unchanged behavior).
      */
-    public function testDecrementParentColumn(): void
+    public function test_decrement_parent_column(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'type_id' => 1, 'enabled' => 1],
@@ -3932,7 +3939,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test increment with extra subtype values.
      */
-    public function testIncrementSubtypeColumnWithExtra(): void
+    public function test_increment_subtype_column_with_extra(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'type_id' => 1],
@@ -3949,7 +3956,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test decrement with extra subtype values.
      */
-    public function testDecrementSubtypeColumnWithExtra(): void
+    public function test_decrement_subtype_column_with_extra(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'type_id' => 1],
@@ -3966,7 +3973,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test increment with extra mixed parent + subtype values.
      */
-    public function testIncrementSubtypeColumnWithMixedExtra(): void
+    public function test_increment_subtype_column_with_mixed_extra(): void
     {
         $this->createQuizRecord(
             ['id' => 1, 'type_id' => 1, 'title' => 'Old Title'],
@@ -3984,7 +3991,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test increment on subtype column with no matching rows returns zero.
      */
-    public function testIncrementSubtypeColumnNoMatch(): void
+    public function test_increment_subtype_column_no_match(): void
     {
         $this->createQuizRecord(['id' => 1, 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 70]);
 
@@ -3997,7 +4004,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test decrement on subtype column with no matching rows returns zero.
      */
-    public function testDecrementSubtypeColumnNoMatch(): void
+    public function test_decrement_subtype_column_no_match(): void
     {
         $this->createQuizRecord(['id' => 1, 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 80]);
 
@@ -4010,7 +4017,7 @@ class SubtypeModelTest extends TestCase
     /**
      * Test increment affects only matching rows across multiple records.
      */
-    public function testIncrementSubtypeColumnMultipleRows(): void
+    public function test_increment_subtype_column_multiple_rows(): void
     {
         $this->createQuizRecord(['id' => 1, 'type_id' => 1], ['assessment_id' => 1, 'passing_score' => 60]);
         $this->createQuizRecord(['id' => 2, 'type_id' => 1], ['assessment_id' => 2, 'passing_score' => 80]);
@@ -4035,7 +4042,7 @@ class SubtypeModelTest extends TestCase
         $container->instance('config', $config);
     }
 
-    public function testMissingSubtypeDataLogStrategySetsFlagOnLoad(): void
+    public function test_missing_subtype_data_log_strategy_sets_flag_on_load(): void
     {
         $this->setCtiConfig('log');
 
@@ -4053,7 +4060,7 @@ class SubtypeModelTest extends TestCase
         $this->assertNull($quiz->passing_score);
     }
 
-    public function testMissingSubtypeDataExceptionStrategyThrowsOnLoad(): void
+    public function test_missing_subtype_data_exception_strategy_throws_on_load(): void
     {
         $this->setCtiConfig('exception');
 
@@ -4070,7 +4077,7 @@ class SubtypeModelTest extends TestCase
         Quiz::find(1);
     }
 
-    public function testMissingSubtypeDataNullStrategySilent(): void
+    public function test_missing_subtype_data_null_strategy_silent(): void
     {
         $this->setCtiConfig('null');
 
@@ -4084,12 +4091,12 @@ class SubtypeModelTest extends TestCase
         $quiz = Quiz::find(1);
 
         $this->assertNotNull($quiz);
-        //the flag is set under every strategy; 'null' only suppresses logging/throwing
+        // the flag is set under every strategy; 'null' only suppresses logging/throwing
         $this->assertTrue($quiz->isSubtypeDataMissing());
         $this->assertNull($quiz->passing_score);
     }
 
-    public function testMissingSubtypeDataLogStrategySetsFlagOnCollectionLoad(): void
+    public function test_missing_subtype_data_log_strategy_sets_flag_on_collection_load(): void
     {
         $this->setCtiConfig('log');
 
@@ -4119,7 +4126,7 @@ class SubtypeModelTest extends TestCase
         $this->assertNull($orphan->passing_score);
     }
 
-    public function testMissingSubtypeDataExceptionStrategyThrowsOnCollectionLoad(): void
+    public function test_missing_subtype_data_exception_strategy_throws_on_collection_load(): void
     {
         $this->setCtiConfig('exception');
 
@@ -4136,7 +4143,7 @@ class SubtypeModelTest extends TestCase
         Quiz::all();
     }
 
-    public function testMissingSubtypeDataNullStrategySilentOnCollectionLoad(): void
+    public function test_missing_subtype_data_null_strategy_silent_on_collection_load(): void
     {
         $this->setCtiConfig('null');
 
@@ -4150,7 +4157,7 @@ class SubtypeModelTest extends TestCase
         $quizzes = Quiz::all();
 
         $this->assertCount(1, $quizzes);
-        //the flag is set under every strategy; 'null' only suppresses logging/throwing
+        // the flag is set under every strategy; 'null' only suppresses logging/throwing
         $this->assertTrue($quizzes->first()->isSubtypeDataMissing());
         $this->assertNull($quizzes->first()->passing_score);
     }
@@ -4159,9 +4166,9 @@ class SubtypeModelTest extends TestCase
     // Auto-inherit $fillable and $casts from CTI parent
     // =========================================================================
 
-    public function testFreshInstanceHasParentCasts(): void
+    public function test_fresh_instance_has_parent_casts(): void
     {
-        $quiz = new Quiz();
+        $quiz = new Quiz;
 
         // 'enabled' is cast to boolean on the parent Assessment model
         $this->assertTrue($quiz->hasCast('enabled'));
@@ -4172,11 +4179,11 @@ class SubtypeModelTest extends TestCase
         $this->assertTrue($quiz->hasCast('show_correct_answers', 'boolean'));
     }
 
-    public function testSubtypeCastsTakePrecedenceOverParent(): void
+    public function test_subtype_casts_take_precedence_over_parent(): void
     {
         // Assessment casts 'enabled' as boolean. If a subtype also casts it,
         // the subtype cast should win.
-        $quiz = new Quiz();
+        $quiz = new Quiz;
         $casts = $quiz->getCasts();
 
         // Parent casts datetime for created_at/updated_at
@@ -4187,9 +4194,9 @@ class SubtypeModelTest extends TestCase
         $this->assertEquals('boolean', $casts['show_correct_answers']);
     }
 
-    public function testGetFillableReturnsMergedParentAndSubtypeAttributes(): void
+    public function test_get_fillable_returns_merged_parent_and_subtype_attributes(): void
     {
-        $quiz = new Quiz();
+        $quiz = new Quiz;
         $fillable = $quiz->getFillable();
 
         // Parent fillable attrs
@@ -4205,21 +4212,21 @@ class SubtypeModelTest extends TestCase
         $this->assertContains('category_id', $fillable);
     }
 
-    public function testExistingSubtypeWithDuplicateParentFillableGetsDeduplicated(): void
+    public function test_existing_subtype_with_duplicate_parent_fillable_gets_deduplicated(): void
     {
         // Quiz already lists parent attrs in its own $fillable.
         // With inheritance, they should appear only once.
-        $quiz = new Quiz();
+        $quiz = new Quiz;
         $fillable = $quiz->getFillable();
 
-        $titleCount = count(array_filter($fillable, fn($v) => $v === 'title'));
+        $titleCount = count(array_filter($fillable, fn ($v) => $v === 'title'));
         $this->assertEquals(1, $titleCount);
     }
 
-    public function testMinimalSubtypeInheritsParentFillable(): void
+    public function test_minimal_subtype_inherits_parent_fillable(): void
     {
         // MinimalQuiz only declares subtype attrs in $fillable
-        $quiz = new MinimalQuiz();
+        $quiz = new MinimalQuiz;
         $fillable = $quiz->getFillable();
 
         // Should have inherited parent attrs
@@ -4233,9 +4240,9 @@ class SubtypeModelTest extends TestCase
         $this->assertContains('time_limit', $fillable);
     }
 
-    public function testInheritParentFillableFalseDisablesMerge(): void
+    public function test_inherit_parent_fillable_false_disables_merge(): void
     {
-        $quiz = new NoInheritQuiz();
+        $quiz = new NoInheritQuiz;
         $fillable = $quiz->getFillable();
 
         // Should NOT have parent attrs
@@ -4248,9 +4255,9 @@ class SubtypeModelTest extends TestCase
         $this->assertContains('time_limit', $fillable);
     }
 
-    public function testExcludeParentFillableExcludesSpecificAttrs(): void
+    public function test_exclude_parent_fillable_excludes_specific_attrs(): void
     {
-        $quiz = new ExcludeFieldQuiz();
+        $quiz = new ExcludeFieldQuiz;
         $fillable = $quiz->getFillable();
 
         // 'description' should be excluded
@@ -4265,17 +4272,17 @@ class SubtypeModelTest extends TestCase
         $this->assertContains('passing_score', $fillable);
     }
 
-    public function testNoInheritQuizStillGetsCastsFromParent(): void
+    public function test_no_inherit_quiz_still_gets_casts_from_parent(): void
     {
         // Even with $inheritParentFillable = false, casts should always be merged
-        $quiz = new NoInheritQuiz();
+        $quiz = new NoInheritQuiz;
         $this->assertTrue($quiz->hasCast('enabled', 'boolean'));
         $this->assertTrue($quiz->hasCast('passing_score', 'integer'));
     }
 
-    public function testMinimalQuizMassAssignmentWorksWithInheritedFillable(): void
+    public function test_minimal_quiz_mass_assignment_works_with_inherited_fillable(): void
     {
-        $quiz = new MinimalQuiz();
+        $quiz = new MinimalQuiz;
         $quiz->fill([
             'title' => 'Test Quiz',
             'description' => 'A test',
@@ -4290,27 +4297,27 @@ class SubtypeModelTest extends TestCase
         $this->assertEquals(30, $quiz->time_limit);
     }
 
-    public function testGetInheritParentFillableReturnsCorrectValue(): void
+    public function test_get_inherit_parent_fillable_returns_correct_value(): void
     {
-        $quiz = new Quiz();
+        $quiz = new Quiz;
         $this->assertTrue($quiz->getInheritParentFillable());
 
-        $noInherit = new NoInheritQuiz();
+        $noInherit = new NoInheritQuiz;
         $this->assertFalse($noInherit->getInheritParentFillable());
     }
 
-    public function testGetExcludeParentFillableReturnsCorrectValue(): void
+    public function test_get_exclude_parent_fillable_returns_correct_value(): void
     {
-        $quiz = new Quiz();
+        $quiz = new Quiz;
         $this->assertEmpty($quiz->getExcludeParentFillable());
 
-        $exclude = new ExcludeFieldQuiz();
+        $exclude = new ExcludeFieldQuiz;
         $this->assertEquals(['description'], $exclude->getExcludeParentFillable());
     }
 
-    public function testAttributeBasedNoInheritDisablesFillableMerge(): void
+    public function test_attribute_based_no_inherit_disables_fillable_merge(): void
     {
-        $quiz = new AttributeNoInheritQuiz();
+        $quiz = new AttributeNoInheritQuiz;
         $fillable = $quiz->getFillable();
 
         $this->assertFalse($quiz->getInheritParentFillable());
@@ -4319,9 +4326,9 @@ class SubtypeModelTest extends TestCase
         $this->assertContains('passing_score', $fillable);
     }
 
-    public function testAttributeBasedExcludeFieldExcludesSpecificAttrs(): void
+    public function test_attribute_based_exclude_field_excludes_specific_attrs(): void
     {
-        $quiz = new AttributeExcludeFieldQuiz();
+        $quiz = new AttributeExcludeFieldQuiz;
         $fillable = $quiz->getFillable();
 
         $this->assertEquals(['description'], $quiz->getExcludeParentFillable());
@@ -4331,16 +4338,16 @@ class SubtypeModelTest extends TestCase
         $this->assertContains('passing_score', $fillable);
     }
 
-    public function testAttributeBasedSubtypeStillInheritsCasts(): void
+    public function test_attribute_based_subtype_still_inherits_casts(): void
     {
-        $quiz = new AttributeNoInheritQuiz();
+        $quiz = new AttributeNoInheritQuiz;
 
         // Casts always merge regardless of fillable setting
         $this->assertTrue($quiz->hasCast('enabled', 'boolean'));
         $this->assertTrue($quiz->hasCast('passing_score', 'integer'));
     }
 
-    public function testMassUpdateFilteringOnChangedParentColumnStillUpdatesSubtype(): void
+    public function test_mass_update_filtering_on_changed_parent_column_still_updates_subtype(): void
     {
         DB::table('assessment')->insert([
             'id' => 1,
@@ -4367,7 +4374,7 @@ class SubtypeModelTest extends TestCase
         $this->assertEquals(80, DB::table('assessment_quiz')->where('assessment_id', 1)->value('passing_score'));
     }
 
-    public function testMassUpdateRollsBackParentWhenSubtypeUpdateFails(): void
+    public function test_mass_update_rolls_back_parent_when_subtype_update_fails(): void
     {
         DB::table('assessment')->insert([
             'id' => 1,
@@ -4395,7 +4402,7 @@ class SubtypeModelTest extends TestCase
         $this->assertEquals('Before', DB::table('assessment')->where('id', 1)->value('title'));
     }
 
-    public function testIncrementRollsBackParentExtraWhenSubtypeIncrementFails(): void
+    public function test_increment_rolls_back_parent_extra_when_subtype_increment_fails(): void
     {
         DB::table('assessment')->insert([
             'id' => 1,
@@ -4422,11 +4429,11 @@ class SubtypeModelTest extends TestCase
         $this->assertEquals('Before', DB::table('assessment')->where('id', 1)->value('title'));
     }
 
-    public function testDiscriminatorScopeRetriesResolutionAfterFailure(): void
+    public function test_discriminator_scope_retries_resolution_after_failure(): void
     {
-        //simulate querying before the lookup table exists
+        // simulate querying before the lookup table exists
         DB::statement('DROP TABLE assessment_type');
-        \Pannella\Cti\Support\SubtypeDiscriminatorScope::clearCache();
+        SubtypeDiscriminatorScope::clearCache();
 
         $this->assertEquals(0, Quiz::count());
 
@@ -4453,7 +4460,7 @@ class SubtypeModelTest extends TestCase
         $this->assertEquals(1, Quiz::count());
     }
 
-    public function testPrimaryKeyZeroLoadsSavesAndDeletesSubtypeData(): void
+    public function test_primary_key_zero_loads_saves_and_deletes_subtype_data(): void
     {
         DB::table('assessment')->insert([
             'id' => 0,
@@ -4483,7 +4490,7 @@ class SubtypeModelTest extends TestCase
         $this->assertEquals(0, DB::table('assessment_quiz')->where('assessment_id', 0)->count());
     }
 
-    public function testAttributesRestoredWhenSaveThrows(): void
+    public function test_attributes_restored_when_save_throws(): void
     {
         // 'saving' fires inside parent::save(), i.e. while the model is
         // temporarily holding only its parent attributes
@@ -4491,7 +4498,7 @@ class SubtypeModelTest extends TestCase
             throw new \RuntimeException('boom');
         });
 
-        $quiz = new Quiz();
+        $quiz = new Quiz;
         $quiz->title = 'My Quiz';
         $quiz->passing_score = 80;
 
@@ -4506,7 +4513,7 @@ class SubtypeModelTest extends TestCase
         $this->assertEquals('My Quiz', $quiz->title);
     }
 
-    public function testLatestDoesNotThrowAmbiguousColumnWithSubtypeJoin(): void
+    public function test_latest_does_not_throw_ambiguous_column_with_subtype_join(): void
     {
         // A physical created_at on the subtype table that is NOT a subtype
         // attribute escapes overlap validation
@@ -4534,4 +4541,3 @@ class SubtypeModelTest extends TestCase
         $this->assertEquals(1, $oldest->id);
     }
 }
-

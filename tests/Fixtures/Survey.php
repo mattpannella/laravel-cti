@@ -6,10 +6,14 @@ use Pannella\Cti\SubtypeModel;
 
 class Survey extends SubtypeModel
 {
-    protected $table = "assessment";
-    protected $primaryKey = "id";
+    protected $table = 'assessment';
+
+    protected $primaryKey = 'id';
+
     protected $subtypeTable = 'assessment_survey';
+
     protected $subtypeKeyName = 'assessment_id';
+
     protected $ctiParentClass = Assessment::class;
 
     protected $subtypeAttributes = [

@@ -14,6 +14,7 @@ use Pannella\Cti\SubtypeModel;
 class AttributeDirectSurvey extends SubtypeModel
 {
     protected $table = 'direct_assessment';
+
     protected $primaryKey = 'id';
 
     protected $attributes = [

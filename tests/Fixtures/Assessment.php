@@ -21,7 +21,7 @@ class Assessment extends Model
         'type_id',
         'title',
         'description',
-        'enabled'
+        'enabled',
     ];
 
     protected $casts = [
@@ -31,8 +31,11 @@ class Assessment extends Model
     ];
 
     protected static $subtypeKey = 'type_id';
+
     protected static $subtypeLookupTable = 'assessment_type';
+
     protected static $subtypeLookupKey = 'id';
+
     protected static $subtypeLookupLabel = 'label';
 
     /**

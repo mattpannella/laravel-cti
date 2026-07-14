@@ -8,11 +8,7 @@ use Attribute;
 class SubtypeConfig
 {
     /**
-     * @param array<string, class-string> $map
-     * @param string $key
-     * @param string|null $lookupTable
-     * @param string|null $lookupKey
-     * @param string|null $lookupLabel
+     * @param  array<string, class-string>  $map
      */
     public function __construct(
         public readonly array $map,

@@ -9,9 +9,10 @@ use Pannella\Cti\SubtypeModel;
  */
 class RegularModel extends SubtypeModel
 {
-    protected $table = "assessment";
-    protected $primaryKey = "id";
-    
+    protected $table = 'assessment';
+
+    protected $primaryKey = 'id';
+
     // Note: No subtypeTable or subtypeAttributes defined
     // This should make it behave like a normal Eloquent model
 
@@ -19,6 +20,6 @@ class RegularModel extends SubtypeModel
         'type_id',
         'title',
         'description',
-        'enabled'
+        'enabled',
     ];
 }
