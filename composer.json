@@ -19,7 +19,7 @@
         "orm",
         "multi-table"
     ],
-    "version": "3.5.2",
+    "version": "3.5.3",
     "authors": [
         {
             "name": "Matt Pannella",
@@ -55,11 +55,13 @@
         "illuminate/queue": ">=8.0 <14.0",
         "phpstan/phpstan": "^2.1",
         "illuminate/config": ">=8.0 <14.0",
-        "illuminate/log": ">=8.0 <14.0"
+        "illuminate/log": ">=8.0 <14.0",
+        "laravel/pint": "^1.20"
     },
     "scripts": {
         "test": "vendor/bin/phpunit",
         "test-coverage": "vendor/bin/phpunit --coverage-html coverage",
-        "test:types": "phpstan --memory-limit=1G"
+        "test:types": "phpstan --memory-limit=1G",
+        "lint": "pint"
     }
 }

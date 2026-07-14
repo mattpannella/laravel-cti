@@ -15,6 +15,7 @@ use Pannella\Cti\SubtypeModel;
 class AttributeNoInheritQuiz extends SubtypeModel
 {
     protected $table = 'assessment';
+
     protected $primaryKey = 'id';
 
     protected $casts = [

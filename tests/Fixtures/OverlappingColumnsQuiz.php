@@ -10,10 +10,14 @@ use Pannella\Cti\SubtypeModel;
  */
 class OverlappingColumnsQuiz extends SubtypeModel
 {
-    protected $table = "assessment";
-    protected $primaryKey = "id";
+    protected $table = 'assessment';
+
+    protected $primaryKey = 'id';
+
     protected $subtypeTable = 'assessment_quiz';
+
     protected $subtypeKeyName = 'assessment_id';
+
     protected $ctiParentClass = Assessment::class;
 
     // 'title' exists on the parent table (assessment) — this is the overlap

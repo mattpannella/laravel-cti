@@ -13,12 +13,13 @@ use Pannella\Cti\SubtypeModel;
  *
  * @template TKey of array-key
  * @template TModel of \Illuminate\Database\Eloquent\Model
- * @extends \Illuminate\Database\Eloquent\Collection<TKey, TModel>
+ *
+ * @extends Collection<TKey, TModel>
  */
 class SubtypedCollection extends Collection
 {
     /**
-     * @param array|mixed $items
+     * @param  array|mixed  $items
      */
     public function __construct($items = [])
     {
@@ -52,9 +53,9 @@ class SubtypedCollection extends Collection
             if (
                 $model instanceof SubtypeModel
                 && $model->getSubtypeTable()
-                && $model->getKey()
+                && $model->getKey() !== null
             ) {
-                if (!$model->isSubtypeDataLoaded()) {
+                if (! $model->isSubtypeDataLoaded()) {
                     $grouped[get_class($model)][] = $model;
                 }
             }

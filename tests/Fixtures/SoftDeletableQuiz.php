@@ -9,10 +9,14 @@ class SoftDeletableQuiz extends SubtypeModel
 {
     use SoftDeletes;
 
-    protected $table = "assessment";
-    protected $primaryKey = "id";
+    protected $table = 'assessment';
+
+    protected $primaryKey = 'id';
+
     protected $subtypeTable = 'assessment_quiz';
+
     protected $subtypeKeyName = 'assessment_id';
+
     protected $ctiParentClass = Assessment::class;
 
     protected $subtypeAttributes = [
@@ -29,7 +33,7 @@ class SoftDeletableQuiz extends SubtypeModel
     ];
 
     protected $attributes = [
-        'show_correct_answers' => false
+        'show_correct_answers' => false,
     ];
 
     protected $fillable = [

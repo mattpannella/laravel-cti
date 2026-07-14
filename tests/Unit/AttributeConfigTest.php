@@ -2,22 +2,25 @@
 
 namespace Pannella\Cti\Tests\Unit;
 
-use PHPUnit\Framework\TestCase;
+use Illuminate\Container\Container;
 use Illuminate\Database\Capsule\Manager as DB;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Events\Dispatcher;
-use Illuminate\Container\Container;
-use Illuminate\Database\Eloquent\Model;
 use Pannella\Cti\Attributes\CtiAttributeResolver;
 use Pannella\Cti\Attributes\SubtypeConfig;
-use Pannella\Cti\Attributes\Subtype;
+use Pannella\Cti\Support\SubtypeDiscriminatorScope;
+use Pannella\Cti\Tests\Fixtures\Assessment;
 use Pannella\Cti\Tests\Fixtures\AttributeAssessment;
 use Pannella\Cti\Tests\Fixtures\AttributeQuiz;
 use Pannella\Cti\Tests\Fixtures\AttributeSurvey;
+use Pannella\Cti\Tests\Fixtures\Quiz;
+use PHPUnit\Framework\TestCase;
 
 class AttributeConfigTest extends TestCase
 {
     protected $db;
+
     protected $dispatcher;
 
     protected function setUp(): void
@@ -63,7 +66,7 @@ class AttributeConfigTest extends TestCase
         AttributeQuiz::clearTypeIdCache();
         AttributeSurvey::clearTypeIdCache();
 
-        \Pannella\Cti\Support\SubtypeDiscriminatorScope::clearCache();
+        SubtypeDiscriminatorScope::clearCache();
 
         $this->db = null;
         $this->dispatcher = null;
@@ -113,9 +116,9 @@ class AttributeConfigTest extends TestCase
         ]);
     }
 
-    public function testParentModelGettersReturnAttributeValues(): void
+    public function test_parent_model_getters_return_attribute_values(): void
     {
-        $model = new AttributeAssessment();
+        $model = new AttributeAssessment;
 
         $this->assertEquals('type_id', $model->getSubtypeKey());
         $this->assertEquals('assessment_type', $model->getSubtypeLookupTable());
@@ -127,9 +130,9 @@ class AttributeConfigTest extends TestCase
         ], $model->getSubtypeMap());
     }
 
-    public function testSubtypeModelGettersReturnAttributeValues(): void
+    public function test_subtype_model_getters_return_attribute_values(): void
     {
-        $quiz = new AttributeQuiz();
+        $quiz = new AttributeQuiz;
 
         $this->assertEquals('assessment_quiz', $quiz->getSubtypeTable());
         $this->assertEquals(['passing_score', 'time_limit', 'show_correct_answers', 'category_id'], $quiz->getSubtypeAttributes());
@@ -137,22 +140,22 @@ class AttributeConfigTest extends TestCase
         $this->assertEquals('assessment_id', $quiz->getSubtypeKeyName());
     }
 
-    public function testPropertyTakesPrecedenceOverAttribute(): void
+    public function test_property_takes_precedence_over_attribute(): void
     {
         // Create a temporary class that has both property and attribute config
         // We test this by checking that the existing property-based Quiz fixture
         // still returns property values even if we were to add an attribute
-        $quiz = new \Pannella\Cti\Tests\Fixtures\Quiz();
+        $quiz = new Quiz;
 
         // These come from properties, not attributes
         $this->assertEquals('assessment_quiz', $quiz->getSubtypeTable());
-        $this->assertEquals(\Pannella\Cti\Tests\Fixtures\Assessment::class, $quiz->getCtiParentClass());
+        $this->assertEquals(Assessment::class, $quiz->getCtiParentClass());
         $this->assertEquals('assessment_id', $quiz->getSubtypeKeyName());
     }
 
-    public function testCreateQuizWithAttributeConfig(): void
+    public function test_create_quiz_with_attribute_config(): void
     {
-        $quiz = new AttributeQuiz();
+        $quiz = new AttributeQuiz;
         $quiz->passing_score = 80;
         $quiz->time_limit = 60;
 
@@ -170,9 +173,9 @@ class AttributeConfigTest extends TestCase
         $this->assertEquals(60, $quizData->time_limit);
     }
 
-    public function testCreateSurveyWithAttributeConfig(): void
+    public function test_create_survey_with_attribute_config(): void
     {
-        $survey = new AttributeSurvey();
+        $survey = new AttributeSurvey;
         $survey->title = 'Test Survey';
         $survey->anonymous = true;
         $survey->allow_multiple_responses = true;
@@ -191,9 +194,9 @@ class AttributeConfigTest extends TestCase
         $this->assertEquals(1, $surveyData->allow_multiple_responses);
     }
 
-    public function testUpdateWithAttributeConfig(): void
+    public function test_update_with_attribute_config(): void
     {
-        $quiz = new AttributeQuiz();
+        $quiz = new AttributeQuiz;
         $quiz->passing_score = 80;
         $quiz->time_limit = 60;
         $quiz->save();
@@ -211,9 +214,9 @@ class AttributeConfigTest extends TestCase
         $this->assertEquals('Updated Quiz', $assessment->title);
     }
 
-    public function testDeleteWithAttributeConfig(): void
+    public function test_delete_with_attribute_config(): void
     {
-        $quiz = new AttributeQuiz();
+        $quiz = new AttributeQuiz;
         $quiz->passing_score = 80;
         $quiz->time_limit = 60;
         $quiz->save();
@@ -225,9 +228,9 @@ class AttributeConfigTest extends TestCase
         $this->assertNull(DB::table('assessment_quiz')->where('assessment_id', $quizId)->first());
     }
 
-    public function testLoadFromDatabaseWithAttributeConfig(): void
+    public function test_load_from_database_with_attribute_config(): void
     {
-        $quiz = new AttributeQuiz();
+        $quiz = new AttributeQuiz;
         $quiz->title = 'DB Quiz';
         $quiz->passing_score = 75;
         $quiz->time_limit = 30;
@@ -240,17 +243,17 @@ class AttributeConfigTest extends TestCase
         $this->assertEquals('DB Quiz', $loaded->title);
     }
 
-    public function testCollectionBatchLoadingWithAttributeConfig(): void
+    public function test_collection_batch_loading_with_attribute_config(): void
     {
         // Create quiz
-        $quiz = new AttributeQuiz();
+        $quiz = new AttributeQuiz;
         $quiz->title = 'Quiz 1';
         $quiz->passing_score = 80;
         $quiz->time_limit = 60;
         $quiz->save();
 
         // Create survey
-        $survey = new AttributeSurvey();
+        $survey = new AttributeSurvey;
         $survey->title = 'Survey 1';
         $survey->anonymous = true;
         $survey->allow_multiple_responses = false;
@@ -270,7 +273,7 @@ class AttributeConfigTest extends TestCase
         $this->assertTrue((bool) $surveyItem->anonymous);
     }
 
-    public function testResolverCachingReturnsSameInstance(): void
+    public function test_resolver_caching_returns_same_instance(): void
     {
         CtiAttributeResolver::clearCache();
 
@@ -285,7 +288,7 @@ class AttributeConfigTest extends TestCase
         $this->assertSame($firstSubtype, $secondSubtype);
     }
 
-    public function testClearCacheForcesReResolution(): void
+    public function test_clear_cache_forces_re_resolution(): void
     {
         $first = CtiAttributeResolver::resolveSubtypeConfig(AttributeAssessment::class);
         CtiAttributeResolver::clearCache();
@@ -298,13 +301,13 @@ class AttributeConfigTest extends TestCase
         $this->assertEquals($first->map, $second->map);
     }
 
-    public function testResolverReturnsNullForNonAnnotatedClass(): void
+    public function test_resolver_returns_null_for_non_annotated_class(): void
     {
-        $result = CtiAttributeResolver::resolveSubtypeConfig(\Pannella\Cti\Tests\Fixtures\Assessment::class);
+        $result = CtiAttributeResolver::resolveSubtypeConfig(Assessment::class);
         // Assessment uses properties, not attributes — resolver should return null
         $this->assertNull($result);
 
-        $result = CtiAttributeResolver::resolveSubtype(\Pannella\Cti\Tests\Fixtures\Quiz::class);
+        $result = CtiAttributeResolver::resolveSubtype(Quiz::class);
         $this->assertNull($result);
     }
 }

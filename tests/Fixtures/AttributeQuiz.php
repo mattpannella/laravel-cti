@@ -14,6 +14,7 @@ use Pannella\Cti\SubtypeModel;
 class AttributeQuiz extends SubtypeModel
 {
     protected $table = 'assessment';
+
     protected $primaryKey = 'id';
 
     protected $casts = [

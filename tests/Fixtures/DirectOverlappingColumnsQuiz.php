@@ -7,9 +7,13 @@ use Pannella\Cti\SubtypeModel;
 class DirectOverlappingColumnsQuiz extends SubtypeModel
 {
     protected $table = 'direct_assessment';
+
     protected $primaryKey = 'id';
+
     protected $subtypeTable = 'direct_assessment_quiz';
+
     protected $subtypeKeyName = 'assessment_id';
+
     protected $ctiParentClass = DirectAssessment::class;
 
     // 'title' exists on the parent table — this is the overlap

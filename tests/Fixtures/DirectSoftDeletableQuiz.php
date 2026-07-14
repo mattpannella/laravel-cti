@@ -10,9 +10,13 @@ class DirectSoftDeletableQuiz extends SubtypeModel
     use SoftDeletes;
 
     protected $table = 'direct_assessment';
+
     protected $primaryKey = 'id';
+
     protected $subtypeTable = 'direct_assessment_quiz';
+
     protected $subtypeKeyName = 'assessment_id';
+
     protected $ctiParentClass = DirectAssessment::class;
 
     protected $subtypeAttributes = [

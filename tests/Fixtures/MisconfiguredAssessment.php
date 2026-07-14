@@ -16,8 +16,11 @@ class MisconfiguredAssessment extends Model
     protected $table = 'assessment';
 
     protected static $subtypeMap = [];
+
     protected static $subtypeLookupTable = 'assessment_type';
+
     protected static $subtypeLookupKey = 'id';
+
     protected static $subtypeLookupLabel = 'label';
     // Deliberately missing: $subtypeKey
 }

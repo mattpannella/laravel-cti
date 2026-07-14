@@ -3,6 +3,8 @@
 namespace Pannella\Cti;
 
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Query\Expression;
+use Illuminate\Support\Collection;
 
 /**
  * Custom query builder for CTI models that handles subtype table joins.
@@ -12,6 +14,7 @@ use Illuminate\Database\Eloquent\Builder;
  * across both parent and subtype tables.
  *
  * @template TModel of \Illuminate\Database\Eloquent\Model
+ *
  * @extends Builder<TModel>
  */
 class SubtypeQueryBuilder extends Builder
@@ -41,19 +44,19 @@ class SubtypeQueryBuilder extends Builder
     /**
      * Add a join to the subtype table if querying subtype columns.
      *
-     * @param string $column The column being queried
+     * @param  string  $column  The column being queried
      * @return void
      */
     protected function addSubtypeJoinIfNeeded($column)
     {
         $model = $this->getModel();
 
-        if (!$model instanceof SubtypeModel) {
+        if (! $model instanceof SubtypeModel) {
             return;
         }
 
         $subtypeTable = $model->getSubtypeTable();
-        if (!$subtypeTable) {
+        if (! $subtypeTable) {
             return;
         }
 
@@ -62,7 +65,7 @@ class SubtypeQueryBuilder extends Builder
         $columnName = count($parts) > 1 ? end($parts) : $column;
 
         // Check if column belongs to subtype
-        if (!in_array($columnName, $model->getSubtypeAttributes())) {
+        if (! in_array($columnName, $model->getSubtypeAttributes())) {
             return;
         }
 
@@ -75,17 +78,17 @@ class SubtypeQueryBuilder extends Builder
         // Add left join to avoid dropping parent records missing subtype data
         $this->leftJoin(
             $subtypeTable,
-            $model->getTable() . '.' . $model->getKeyName(),
+            $model->getTable().'.'.$model->getKeyName(),
             '=',
-            $subtypeTable . '.' . $model->getSubtypeKeyName()
+            $subtypeTable.'.'.$model->getSubtypeKeyName()
         );
     }
 
     /**
      * Intercept forwarded method calls to add subtype joins for column-bearing methods.
      *
-     * @param string $method
-     * @param array<int, mixed> $parameters
+     * @param  string  $method
+     * @param  array<int, mixed>  $parameters
      * @return mixed
      */
     public function __call($method, $parameters)
@@ -114,10 +117,10 @@ class SubtypeQueryBuilder extends Builder
     /**
      * Add basic where clause to the query, handling subtype columns.
      *
-     * @param \Closure|string|array<mixed> $column
-     * @param mixed $operator
-     * @param mixed $value
-     * @param string $boolean
+     * @param  \Closure|string|array<mixed>  $column
+     * @param  mixed  $operator
+     * @param  mixed  $value
+     * @param  string  $boolean
      * @return $this
      */
     public function where($column, $operator = null, $value = null, $boolean = 'and'): self
@@ -132,10 +135,10 @@ class SubtypeQueryBuilder extends Builder
     /**
      * Add a "where in" clause to the query, handling subtype columns.
      *
-     * @param string $column
-     * @param mixed $values
-     * @param string $boolean
-     * @param bool $not
+     * @param  string  $column
+     * @param  mixed  $values
+     * @param  string  $boolean
+     * @param  bool  $not
      * @return $this
      */
     public function whereIn($column, $values, $boolean = 'and', $not = false): self
@@ -152,9 +155,9 @@ class SubtypeQueryBuilder extends Builder
     /**
      * Add a "where not in" clause to the query, handling subtype columns.
      *
-     * @param string $column
-     * @param mixed $values
-     * @param string $boolean
+     * @param  string  $column
+     * @param  mixed  $values
+     * @param  string  $boolean
      * @return $this
      */
     public function whereNotIn($column, $values, $boolean = 'and'): self
@@ -171,9 +174,9 @@ class SubtypeQueryBuilder extends Builder
     /**
      * Add a "where null" clause to the query, handling subtype columns.
      *
-     * @param string|array<mixed> $columns
-     * @param string $boolean
-     * @param bool $not
+     * @param  string|array<mixed>  $columns
+     * @param  string  $boolean
+     * @param  bool  $not
      * @return $this
      */
     public function whereNull($columns, $boolean = 'and', $not = false): self
@@ -193,8 +196,8 @@ class SubtypeQueryBuilder extends Builder
     /**
      * Add a "where not null" clause to the query, handling subtype columns.
      *
-     * @param string|array<mixed> $columns
-     * @param string $boolean
+     * @param  string|array<mixed>  $columns
+     * @param  string  $boolean
      * @return $this
      */
     public function whereNotNull($columns, $boolean = 'and'): self
@@ -214,10 +217,10 @@ class SubtypeQueryBuilder extends Builder
     /**
      * Add a "where column" clause to the query, handling subtype columns.
      *
-     * @param \Closure|string|array<mixed> $first
-     * @param string|null $operator
-     * @param string|null $second
-     * @param string|null $boolean
+     * @param  \Closure|string|array<mixed>  $first
+     * @param  string|null  $operator
+     * @param  string|null  $second
+     * @param  string|null  $boolean
      * @return $this
      */
     public function whereColumn($first, $operator = null, $second = null, $boolean = 'and'): self
@@ -237,10 +240,10 @@ class SubtypeQueryBuilder extends Builder
     /**
      * Add a "where between" clause to the query, handling subtype columns.
      *
-     * @param \Illuminate\Database\Query\Expression<literal-string>|string $column
-     * @param iterable<mixed> $values
-     * @param string $boolean
-     * @param bool $not
+     * @param  Expression<literal-string>|string  $column
+     * @param  iterable<mixed>  $values
+     * @param  string  $boolean
+     * @param  bool  $not
      * @return $this
      */
     public function whereBetween($column, iterable $values, $boolean = 'and', $not = false): self
@@ -256,8 +259,8 @@ class SubtypeQueryBuilder extends Builder
     /**
      * Add an "order by" clause to the query, handling subtype columns.
      *
-     * @param \Closure|\Illuminate\Database\Query\Builder|\Illuminate\Database\Query\Expression<literal-string>|string $column
-     * @param string $direction
+     * @param  \Closure|\Illuminate\Database\Query\Builder|Expression<literal-string>|string  $column
+     * @param  string  $direction
      * @return $this
      */
     public function orderBy($column, $direction = 'asc'): self
@@ -273,7 +276,7 @@ class SubtypeQueryBuilder extends Builder
     /**
      * Add a "group by" clause to the query, handling subtype columns.
      *
-     * @param array<mixed>|string ...$groups
+     * @param  array<mixed>|string  ...$groups
      * @return $this
      */
     public function groupBy(...$groups): self
@@ -291,10 +294,10 @@ class SubtypeQueryBuilder extends Builder
     /**
      * Add a "having" clause to the query, handling subtype columns.
      *
-     * @param string $column
-     * @param string|null $operator
-     * @param string|null $value
-     * @param string $boolean
+     * @param  string  $column
+     * @param  string|null  $operator
+     * @param  string|null  $value
+     * @param  string  $boolean
      * @return $this
      */
     public function having($column, $operator = null, $value = null, $boolean = 'and'): self
@@ -311,7 +314,7 @@ class SubtypeQueryBuilder extends Builder
     /**
      * Add a basic select clause to the query, handling subtype columns.
      *
-     * @param array|mixed $columns
+     * @param  array|mixed  $columns
      * @return $this
      */
     public function select($columns = ['*']): self
@@ -331,8 +334,8 @@ class SubtypeQueryBuilder extends Builder
     /**
      * Execute an aggregate function on the database, handling subtype columns.
      *
-     * @param string $function The aggregate function to execute (count, sum, avg, etc.)
-     * @param array<int, string>|string $columns The columns to aggregate
+     * @param  string  $function  The aggregate function to execute (count, sum, avg, etc.)
+     * @param  array<int, string>|string  $columns  The columns to aggregate
      * @return mixed The result of the aggregate function
      */
     public function aggregate($function, $columns = ['*']): mixed
@@ -352,7 +355,7 @@ class SubtypeQueryBuilder extends Builder
     /**
      * Add an "order by" clause for a descending sort, handling subtype columns.
      *
-     * @param mixed $column
+     * @param  mixed  $column
      * @return $this
      */
     public function latest($column = null): self
@@ -363,6 +366,7 @@ class SubtypeQueryBuilder extends Builder
 
         if (is_string($column)) {
             $this->addSubtypeJoinIfNeeded($column);
+            $column = $this->qualifyParentColumn($column);
         }
 
         return parent::latest($column);
@@ -371,7 +375,7 @@ class SubtypeQueryBuilder extends Builder
     /**
      * Add an "order by" clause for an ascending sort, handling subtype columns.
      *
-     * @param mixed $column
+     * @param  mixed  $column
      * @return $this
      */
     public function oldest($column = null): self
@@ -382,17 +386,41 @@ class SubtypeQueryBuilder extends Builder
 
         if (is_string($column)) {
             $this->addSubtypeJoinIfNeeded($column);
+            $column = $this->qualifyParentColumn($column);
         }
 
         return parent::oldest($column);
     }
 
     /**
+     * Qualify an unqualified parent-table column with the model's table name.
+     *
+     * Prevents ambiguous-column errors when a subtype join is present and the
+     * subtype table physically contains the same column (e.g. timestamps).
+     * Subtype attributes are left unqualified — overlap validation guarantees
+     * the parent table doesn't share them.
+     */
+    protected function qualifyParentColumn(string $column): string
+    {
+        if (str_contains($column, '.')) {
+            return $column;
+        }
+
+        $model = $this->getModel();
+
+        if ($model instanceof SubtypeModel && in_array($column, $model->getSubtypeAttributes())) {
+            return $column;
+        }
+
+        return $model->qualifyColumn($column);
+    }
+
+    /**
      * Get an array with the values of a given column, handling subtype columns.
      *
-     * @param string|mixed $column
-     * @param string|null $key
-     * @return \Illuminate\Support\Collection<array-key, mixed>
+     * @param  string|mixed  $column
+     * @param  string|null  $key
+     * @return Collection<array-key, mixed>
      */
     public function pluck($column, $key = null)
     {
@@ -409,7 +437,7 @@ class SubtypeQueryBuilder extends Builder
     /**
      * Get a single column's value from the first result, handling subtype columns.
      *
-     * @param string|mixed $column
+     * @param  string|mixed  $column
      * @return mixed
      */
     public function value($column)
@@ -424,14 +452,14 @@ class SubtypeQueryBuilder extends Builder
     /**
      * Update records in the database, splitting values between parent and subtype tables.
      *
-     * @param array<string, mixed> $values
+     * @param  array<string, mixed>  $values
      * @return int
      */
     public function update(array $values)
     {
         $model = $this->getModel();
 
-        if (!$model instanceof SubtypeModel || !$model->getSubtypeTable()) {
+        if (! $model instanceof SubtypeModel || ! $model->getSubtypeTable()) {
             return parent::update($values);
         }
 
@@ -439,134 +467,133 @@ class SubtypeQueryBuilder extends Builder
         $subtypeValues = array_intersect_key($values, $subtypeAttrs);
         $parentValues = array_diff_key($values, $subtypeAttrs);
 
-        $parentAffected = 0;
-        $subtypeAffected = 0;
+        return $model->getConnection()->transaction(function () use ($model, $parentValues, $subtypeValues) {
+            $parentAffected = 0;
+            $subtypeAffected = 0;
 
-        if (!empty($parentValues)) {
-            $parentAffected = parent::update($parentValues);
-        }
+            // Pluck matching IDs before the parent update — updating a parent column
+            // referenced in the where clause would change which rows match
+            $ids = [];
+            if (! empty($subtypeValues)) {
+                $pluckQuery = clone $this;
 
-        if (!empty($subtypeValues)) {
-            $subtypeTable = $model->getSubtypeTable();
-            $keyName = $model->getKeyName();
-            $subtypeKeyName = $model->getSubtypeKeyName();
+                // Join on the clone so raw where clauses referencing subtype columns still resolve
+                foreach ($subtypeValues as $col => $val) {
+                    $pluckQuery->addSubtypeJoinIfNeeded($col);
+                }
 
-            // Add join so the where clauses referencing subtype columns work for ID plucking
-            foreach ($subtypeValues as $col => $val) {
-                $this->addSubtypeJoinIfNeeded($col);
+                $ids = $pluckQuery->pluck($model->getTable().'.'.$model->getKeyName())->all();
             }
 
-            $ids = $this->pluck($model->getTable() . '.' . $keyName)->all();
+            if (! empty($parentValues)) {
+                $parentAffected = parent::update($parentValues);
+            }
 
-            if (!empty($ids)) {
-                $subtypeAffected = $model->getConnection()->table($subtypeTable)
-                    ->whereIn($subtypeKeyName, $ids)
+            if (! empty($subtypeValues) && ! empty($ids)) {
+                $subtypeAffected = $model->getConnection()->table($model->getSubtypeTable())
+                    ->whereIn($model->getSubtypeKeyName(), $ids)
                     ->update($subtypeValues);
             }
-        }
 
-        return max($parentAffected, $subtypeAffected);
+            return max($parentAffected, $subtypeAffected);
+        });
     }
 
     /**
      * Increment a column's value by a given amount, handling subtype columns.
      *
-     * @param string|mixed $column
-     * @param float|int $amount
-     * @param array<string, mixed> $extra
+     * @param  string|mixed  $column
+     * @param  float|int  $amount
+     * @param  array<string, mixed>  $extra
      * @return int
      */
     public function increment($column, $amount = 1, array $extra = [])
     {
         $model = $this->getModel();
 
-        if (!$model instanceof SubtypeModel || !$model->getSubtypeTable()) {
+        if (! $model instanceof SubtypeModel || ! $model->getSubtypeTable()) {
             return parent::increment($column, $amount, $extra);
         }
 
         $subtypeAttrs = $model->getSubtypeAttributes();
 
-        if (!is_string($column) || !in_array($column, $subtypeAttrs)) {
+        if (! is_string($column) || ! in_array($column, $subtypeAttrs)) {
             return parent::increment($column, $amount, $extra);
         }
 
         $this->addSubtypeJoinIfNeeded($column);
 
-        $subtypeTable = $model->getSubtypeTable();
-        $keyName = $model->getKeyName();
-        $subtypeKeyName = $model->getSubtypeKeyName();
+        return $model->getConnection()->transaction(function () use ($model, $column, $amount, $extra, $subtypeAttrs) {
+            $ids = $this->pluck($model->getTable().'.'.$model->getKeyName())->all();
 
-        $ids = $this->pluck($model->getTable() . '.' . $keyName)->all();
+            if (empty($ids)) {
+                return 0;
+            }
 
-        if (empty($ids)) {
-            return 0;
-        }
+            // Split extra values between parent and subtype
+            $subtypeAttrFlip = array_flip($subtypeAttrs);
+            $subtypeExtra = array_intersect_key($extra, $subtypeAttrFlip);
+            $parentExtra = array_diff_key($extra, $subtypeAttrFlip);
 
-        // Split extra values between parent and subtype
-        $subtypeAttrFlip = array_flip($subtypeAttrs);
-        $subtypeExtra = array_intersect_key($extra, $subtypeAttrFlip);
-        $parentExtra = array_diff_key($extra, $subtypeAttrFlip);
+            $parentAffected = 0;
+            if (! empty($parentExtra)) {
+                $parentAffected = parent::update($parentExtra);
+            }
 
-        $parentAffected = 0;
-        if (!empty($parentExtra)) {
-            $parentAffected = parent::update($parentExtra);
-        }
+            $subtypeAffected = $model->getConnection()->table($model->getSubtypeTable())
+                ->whereIn($model->getSubtypeKeyName(), $ids)
+                ->increment($column, $amount, $subtypeExtra);
 
-        $subtypeAffected = $model->getConnection()->table($subtypeTable)
-            ->whereIn($subtypeKeyName, $ids)
-            ->increment($column, $amount, $subtypeExtra);
-
-        return max($parentAffected, $subtypeAffected);
+            return max($parentAffected, $subtypeAffected);
+        });
     }
 
     /**
      * Decrement a column's value by a given amount, handling subtype columns.
      *
-     * @param string|mixed $column
-     * @param float|int $amount
-     * @param array<string, mixed> $extra
+     * @param  string|mixed  $column
+     * @param  float|int  $amount
+     * @param  array<string, mixed>  $extra
      * @return int
      */
     public function decrement($column, $amount = 1, array $extra = [])
     {
         $model = $this->getModel();
 
-        if (!$model instanceof SubtypeModel || !$model->getSubtypeTable()) {
+        if (! $model instanceof SubtypeModel || ! $model->getSubtypeTable()) {
             return parent::decrement($column, $amount, $extra);
         }
 
         $subtypeAttrs = $model->getSubtypeAttributes();
 
-        if (!is_string($column) || !in_array($column, $subtypeAttrs)) {
+        if (! is_string($column) || ! in_array($column, $subtypeAttrs)) {
             return parent::decrement($column, $amount, $extra);
         }
 
         $this->addSubtypeJoinIfNeeded($column);
 
-        $subtypeTable = $model->getSubtypeTable();
-        $keyName = $model->getKeyName();
-        $subtypeKeyName = $model->getSubtypeKeyName();
+        return $model->getConnection()->transaction(function () use ($model, $column, $amount, $extra, $subtypeAttrs) {
+            $ids = $this->pluck($model->getTable().'.'.$model->getKeyName())->all();
 
-        $ids = $this->pluck($model->getTable() . '.' . $keyName)->all();
+            if (empty($ids)) {
+                return 0;
+            }
 
-        if (empty($ids)) {
-            return 0;
-        }
+            // Split extra values between parent and subtype
+            $subtypeAttrFlip = array_flip($subtypeAttrs);
+            $subtypeExtra = array_intersect_key($extra, $subtypeAttrFlip);
+            $parentExtra = array_diff_key($extra, $subtypeAttrFlip);
 
-        // Split extra values between parent and subtype
-        $subtypeAttrFlip = array_flip($subtypeAttrs);
-        $subtypeExtra = array_intersect_key($extra, $subtypeAttrFlip);
-        $parentExtra = array_diff_key($extra, $subtypeAttrFlip);
+            $parentAffected = 0;
+            if (! empty($parentExtra)) {
+                $parentAffected = parent::update($parentExtra);
+            }
 
-        $parentAffected = 0;
-        if (!empty($parentExtra)) {
-            $parentAffected = parent::update($parentExtra);
-        }
+            $subtypeAffected = $model->getConnection()->table($model->getSubtypeTable())
+                ->whereIn($model->getSubtypeKeyName(), $ids)
+                ->decrement($column, $amount, $subtypeExtra);
 
-        $subtypeAffected = $model->getConnection()->table($subtypeTable)
-            ->whereIn($subtypeKeyName, $ids)
-            ->decrement($column, $amount, $subtypeExtra);
-
-        return max($parentAffected, $subtypeAffected);
+            return max($parentAffected, $subtypeAffected);
+        });
     }
 }

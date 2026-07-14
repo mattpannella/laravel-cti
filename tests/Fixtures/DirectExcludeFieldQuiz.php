@@ -7,9 +7,13 @@ use Pannella\Cti\SubtypeModel;
 class DirectExcludeFieldQuiz extends SubtypeModel
 {
     protected $table = 'direct_assessment';
+
     protected $primaryKey = 'id';
+
     protected $subtypeTable = 'direct_assessment_quiz';
+
     protected $subtypeKeyName = 'assessment_id';
+
     protected $ctiParentClass = DirectAssessment::class;
 
     protected array $excludeParentFillable = ['description'];

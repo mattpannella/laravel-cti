@@ -21,9 +21,11 @@ When a parent record exists but its corresponding subtype row is missing (a data
 
 | Value | Behavior |
 |-------|----------|
-| `'log'` *(default)* | Subtype attributes remain `null`, a warning is logged, and `$model->isSubtypeDataMissing()` returns `true` |
+| `'log'` *(default)* | Subtype attributes remain `null` and a warning is logged |
 | `'exception'` | Throws `SubtypeException` immediately |
-| `'null'` | Subtype attributes silently remain `null` with no warning and no flag |
+| `'null'` | Subtype attributes silently remain `null` with no warning |
+
+Under every strategy, `$model->isSubtypeDataMissing()` returns `true` when the subtype row is missing.
 
 You can check for missing data programmatically:
 
