@@ -1765,7 +1765,34 @@ class DirectDiscriminatorTest extends TestCase
 
         $this->assertNotNull($quiz);
         $this->assertNull($quiz->passing_score);
-        $this->assertFalse($quiz->isSubtypeDataMissing());
+        //the flag is set under every strategy; 'null' only suppresses logging/throwing
+        $this->assertTrue($quiz->isSubtypeDataMissing());
+    }
+
+    // ============================================================
+    // Falsy Discriminator Values
+    // ============================================================
+
+    public function testResolveSubtypeLabelHandlesFalsyTypeIds(): void
+    {
+        // '0' and 0 are legitimate discriminator values in direct mode
+        $this->assertSame('0', DirectAssessment::resolveSubtypeLabel('0'));
+        $this->assertSame('0', DirectAssessment::resolveSubtypeLabel(0));
+
+        // null and empty string mean "no type"
+        $this->assertNull(DirectAssessment::resolveSubtypeLabel(null));
+        $this->assertNull(DirectAssessment::resolveSubtypeLabel(''));
+    }
+
+    public function testExplicitZeroDiscriminatorNotOverwrittenOnCreate(): void
+    {
+        $quiz = new DirectQuiz();
+        $quiz->type = '0';
+        $quiz->title = 'Zero Type';
+        $quiz->passing_score = 10;
+        $quiz->save();
+
+        $this->assertSame('0', DB::table('direct_assessment')->where('title', 'Zero Type')->value('type'));
     }
 
     // ============================================================

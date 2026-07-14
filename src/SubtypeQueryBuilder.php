@@ -363,6 +363,7 @@ class SubtypeQueryBuilder extends Builder
 
         if (is_string($column)) {
             $this->addSubtypeJoinIfNeeded($column);
+            $column = $this->qualifyParentColumn($column);
         }
 
         return parent::latest($column);
@@ -382,9 +383,36 @@ class SubtypeQueryBuilder extends Builder
 
         if (is_string($column)) {
             $this->addSubtypeJoinIfNeeded($column);
+            $column = $this->qualifyParentColumn($column);
         }
 
         return parent::oldest($column);
+    }
+
+    /**
+     * Qualify an unqualified parent-table column with the model's table name.
+     *
+     * Prevents ambiguous-column errors when a subtype join is present and the
+     * subtype table physically contains the same column (e.g. timestamps).
+     * Subtype attributes are left unqualified — overlap validation guarantees
+     * the parent table doesn't share them.
+     *
+     * @param string $column
+     * @return string
+     */
+    protected function qualifyParentColumn(string $column): string
+    {
+        if (str_contains($column, '.')) {
+            return $column;
+        }
+
+        $model = $this->getModel();
+
+        if ($model instanceof SubtypeModel && in_array($column, $model->getSubtypeAttributes())) {
+            return $column;
+        }
+
+        return $model->qualifyColumn($column);
     }
 
     /**
@@ -439,33 +467,36 @@ class SubtypeQueryBuilder extends Builder
         $subtypeValues = array_intersect_key($values, $subtypeAttrs);
         $parentValues = array_diff_key($values, $subtypeAttrs);
 
-        $parentAffected = 0;
-        $subtypeAffected = 0;
+        return $model->getConnection()->transaction(function () use ($model, $parentValues, $subtypeValues) {
+            $parentAffected = 0;
+            $subtypeAffected = 0;
 
-        if (!empty($parentValues)) {
-            $parentAffected = parent::update($parentValues);
-        }
+            // Pluck matching IDs before the parent update — updating a parent column
+            // referenced in the where clause would change which rows match
+            $ids = [];
+            if (!empty($subtypeValues)) {
+                $pluckQuery = clone $this;
 
-        if (!empty($subtypeValues)) {
-            $subtypeTable = $model->getSubtypeTable();
-            $keyName = $model->getKeyName();
-            $subtypeKeyName = $model->getSubtypeKeyName();
+                // Join on the clone so raw where clauses referencing subtype columns still resolve
+                foreach ($subtypeValues as $col => $val) {
+                    $pluckQuery->addSubtypeJoinIfNeeded($col);
+                }
 
-            // Add join so the where clauses referencing subtype columns work for ID plucking
-            foreach ($subtypeValues as $col => $val) {
-                $this->addSubtypeJoinIfNeeded($col);
+                $ids = $pluckQuery->pluck($model->getTable() . '.' . $model->getKeyName())->all();
             }
 
-            $ids = $this->pluck($model->getTable() . '.' . $keyName)->all();
+            if (!empty($parentValues)) {
+                $parentAffected = parent::update($parentValues);
+            }
 
-            if (!empty($ids)) {
-                $subtypeAffected = $model->getConnection()->table($subtypeTable)
-                    ->whereIn($subtypeKeyName, $ids)
+            if (!empty($subtypeValues) && !empty($ids)) {
+                $subtypeAffected = $model->getConnection()->table($model->getSubtypeTable())
+                    ->whereIn($model->getSubtypeKeyName(), $ids)
                     ->update($subtypeValues);
             }
-        }
 
-        return max($parentAffected, $subtypeAffected);
+            return max($parentAffected, $subtypeAffected);
+        });
     }
 
     /**
@@ -492,31 +523,29 @@ class SubtypeQueryBuilder extends Builder
 
         $this->addSubtypeJoinIfNeeded($column);
 
-        $subtypeTable = $model->getSubtypeTable();
-        $keyName = $model->getKeyName();
-        $subtypeKeyName = $model->getSubtypeKeyName();
+        return $model->getConnection()->transaction(function () use ($model, $column, $amount, $extra, $subtypeAttrs) {
+            $ids = $this->pluck($model->getTable() . '.' . $model->getKeyName())->all();
 
-        $ids = $this->pluck($model->getTable() . '.' . $keyName)->all();
+            if (empty($ids)) {
+                return 0;
+            }
 
-        if (empty($ids)) {
-            return 0;
-        }
+            // Split extra values between parent and subtype
+            $subtypeAttrFlip = array_flip($subtypeAttrs);
+            $subtypeExtra = array_intersect_key($extra, $subtypeAttrFlip);
+            $parentExtra = array_diff_key($extra, $subtypeAttrFlip);
 
-        // Split extra values between parent and subtype
-        $subtypeAttrFlip = array_flip($subtypeAttrs);
-        $subtypeExtra = array_intersect_key($extra, $subtypeAttrFlip);
-        $parentExtra = array_diff_key($extra, $subtypeAttrFlip);
+            $parentAffected = 0;
+            if (!empty($parentExtra)) {
+                $parentAffected = parent::update($parentExtra);
+            }
 
-        $parentAffected = 0;
-        if (!empty($parentExtra)) {
-            $parentAffected = parent::update($parentExtra);
-        }
+            $subtypeAffected = $model->getConnection()->table($model->getSubtypeTable())
+                ->whereIn($model->getSubtypeKeyName(), $ids)
+                ->increment($column, $amount, $subtypeExtra);
 
-        $subtypeAffected = $model->getConnection()->table($subtypeTable)
-            ->whereIn($subtypeKeyName, $ids)
-            ->increment($column, $amount, $subtypeExtra);
-
-        return max($parentAffected, $subtypeAffected);
+            return max($parentAffected, $subtypeAffected);
+        });
     }
 
     /**
@@ -543,30 +572,28 @@ class SubtypeQueryBuilder extends Builder
 
         $this->addSubtypeJoinIfNeeded($column);
 
-        $subtypeTable = $model->getSubtypeTable();
-        $keyName = $model->getKeyName();
-        $subtypeKeyName = $model->getSubtypeKeyName();
+        return $model->getConnection()->transaction(function () use ($model, $column, $amount, $extra, $subtypeAttrs) {
+            $ids = $this->pluck($model->getTable() . '.' . $model->getKeyName())->all();
 
-        $ids = $this->pluck($model->getTable() . '.' . $keyName)->all();
+            if (empty($ids)) {
+                return 0;
+            }
 
-        if (empty($ids)) {
-            return 0;
-        }
+            // Split extra values between parent and subtype
+            $subtypeAttrFlip = array_flip($subtypeAttrs);
+            $subtypeExtra = array_intersect_key($extra, $subtypeAttrFlip);
+            $parentExtra = array_diff_key($extra, $subtypeAttrFlip);
 
-        // Split extra values between parent and subtype
-        $subtypeAttrFlip = array_flip($subtypeAttrs);
-        $subtypeExtra = array_intersect_key($extra, $subtypeAttrFlip);
-        $parentExtra = array_diff_key($extra, $subtypeAttrFlip);
+            $parentAffected = 0;
+            if (!empty($parentExtra)) {
+                $parentAffected = parent::update($parentExtra);
+            }
 
-        $parentAffected = 0;
-        if (!empty($parentExtra)) {
-            $parentAffected = parent::update($parentExtra);
-        }
+            $subtypeAffected = $model->getConnection()->table($model->getSubtypeTable())
+                ->whereIn($model->getSubtypeKeyName(), $ids)
+                ->decrement($column, $amount, $subtypeExtra);
 
-        $subtypeAffected = $model->getConnection()->table($subtypeTable)
-            ->whereIn($subtypeKeyName, $ids)
-            ->decrement($column, $amount, $subtypeExtra);
-
-        return max($parentAffected, $subtypeAffected);
+            return max($parentAffected, $subtypeAffected);
+        });
     }
 }

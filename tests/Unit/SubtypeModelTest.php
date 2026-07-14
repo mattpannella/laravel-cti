@@ -4084,7 +4084,8 @@ class SubtypeModelTest extends TestCase
         $quiz = Quiz::find(1);
 
         $this->assertNotNull($quiz);
-        $this->assertFalse($quiz->isSubtypeDataMissing());
+        //the flag is set under every strategy; 'null' only suppresses logging/throwing
+        $this->assertTrue($quiz->isSubtypeDataMissing());
         $this->assertNull($quiz->passing_score);
     }
 
@@ -4149,7 +4150,8 @@ class SubtypeModelTest extends TestCase
         $quizzes = Quiz::all();
 
         $this->assertCount(1, $quizzes);
-        $this->assertFalse($quizzes->first()->isSubtypeDataMissing());
+        //the flag is set under every strategy; 'null' only suppresses logging/throwing
+        $this->assertTrue($quizzes->first()->isSubtypeDataMissing());
         $this->assertNull($quizzes->first()->passing_score);
     }
 
@@ -4336,6 +4338,200 @@ class SubtypeModelTest extends TestCase
         // Casts always merge regardless of fillable setting
         $this->assertTrue($quiz->hasCast('enabled', 'boolean'));
         $this->assertTrue($quiz->hasCast('passing_score', 'integer'));
+    }
+
+    public function testMassUpdateFilteringOnChangedParentColumnStillUpdatesSubtype(): void
+    {
+        DB::table('assessment')->insert([
+            'id' => 1,
+            'type_id' => 1,
+            'title' => 'Draft Quiz',
+            'enabled' => true,
+        ]);
+        DB::table('assessment_quiz')->insert([
+            'assessment_id' => 1,
+            'passing_score' => 50,
+            'time_limit' => 30,
+            'show_correct_answers' => false,
+        ]);
+
+        // The where clause filters on 'enabled', which the update itself flips
+        // the subtype write must target the rows matched *before* the parent update
+        $affected = Quiz::where('enabled', true)->update([
+            'enabled' => false,
+            'passing_score' => 80,
+        ]);
+
+        $this->assertEquals(1, $affected);
+        $this->assertEquals(0, DB::table('assessment')->where('id', 1)->value('enabled'));
+        $this->assertEquals(80, DB::table('assessment_quiz')->where('assessment_id', 1)->value('passing_score'));
+    }
+
+    public function testMassUpdateRollsBackParentWhenSubtypeUpdateFails(): void
+    {
+        DB::table('assessment')->insert([
+            'id' => 1,
+            'type_id' => 1,
+            'title' => 'Before',
+            'enabled' => true,
+        ]);
+        DB::table('assessment_quiz')->insert([
+            'assessment_id' => 1,
+            'passing_score' => 50,
+            'time_limit' => 30,
+            'show_correct_answers' => false,
+        ]);
+
+        // force a failure
+        DB::statement('DROP TABLE assessment_quiz');
+
+        try {
+            Quiz::where('id', 1)->update(['title' => 'After', 'passing_score' => 80]);
+            $this->fail('Expected the mass update to throw when the subtype table is missing');
+        } catch (\Exception $e) {
+            // expected
+        }
+
+        $this->assertEquals('Before', DB::table('assessment')->where('id', 1)->value('title'));
+    }
+
+    public function testIncrementRollsBackParentExtraWhenSubtypeIncrementFails(): void
+    {
+        DB::table('assessment')->insert([
+            'id' => 1,
+            'type_id' => 1,
+            'title' => 'Before',
+            'enabled' => true,
+        ]);
+        DB::table('assessment_quiz')->insert([
+            'assessment_id' => 1,
+            'passing_score' => 50,
+            'time_limit' => 30,
+            'show_correct_answers' => false,
+        ]);
+
+        DB::statement('DROP TABLE assessment_quiz');
+
+        try {
+            Quiz::where('id', 1)->increment('passing_score', 5, ['title' => 'After']);
+            $this->fail('Expected the increment to throw when the subtype table is missing');
+        } catch (\Exception $e) {
+            // expected
+        }
+
+        $this->assertEquals('Before', DB::table('assessment')->where('id', 1)->value('title'));
+    }
+
+    public function testDiscriminatorScopeRetriesResolutionAfterFailure(): void
+    {
+        //simulate querying before the lookup table exists
+        DB::statement('DROP TABLE assessment_type');
+        \Pannella\Cti\Support\SubtypeDiscriminatorScope::clearCache();
+
+        $this->assertEquals(0, Quiz::count());
+
+        DB::schema()->create('assessment_type', function (Blueprint $table) {
+            $table->id();
+            $table->string('label')->unique();
+            $table->timestamps();
+        });
+        $this->seedTestData();
+
+        DB::table('assessment')->insert([
+            'id' => 1,
+            'type_id' => 1,
+            'title' => 'Recovered Quiz',
+            'enabled' => true,
+        ]);
+        DB::table('assessment_quiz')->insert([
+            'assessment_id' => 1,
+            'passing_score' => 50,
+            'time_limit' => 30,
+            'show_correct_answers' => false,
+        ]);
+
+        $this->assertEquals(1, Quiz::count());
+    }
+
+    public function testPrimaryKeyZeroLoadsSavesAndDeletesSubtypeData(): void
+    {
+        DB::table('assessment')->insert([
+            'id' => 0,
+            'type_id' => 1,
+            'title' => 'Zero PK',
+            'enabled' => true,
+        ]);
+        DB::table('assessment_quiz')->insert([
+            'assessment_id' => 0,
+            'passing_score' => 55,
+            'time_limit' => 10,
+            'show_correct_answers' => false,
+        ]);
+
+        $quiz = Quiz::find(0);
+
+        $this->assertNotNull($quiz);
+        $this->assertEquals(55, $quiz->passing_score);
+        $this->assertFalse($quiz->isSubtypeDataMissing());
+
+        $quiz->passing_score = 60;
+        $this->assertTrue($quiz->save());
+        $this->assertEquals(60, DB::table('assessment_quiz')->where('assessment_id', 0)->value('passing_score'));
+
+        $this->assertTrue($quiz->delete());
+        $this->assertEquals(0, DB::table('assessment')->where('id', 0)->count());
+        $this->assertEquals(0, DB::table('assessment_quiz')->where('assessment_id', 0)->count());
+    }
+
+    public function testAttributesRestoredWhenSaveThrows(): void
+    {
+        // 'saving' fires inside parent::save(), i.e. while the model is
+        // temporarily holding only its parent attributes
+        Quiz::saving(function () {
+            throw new \RuntimeException('boom');
+        });
+
+        $quiz = new Quiz();
+        $quiz->title = 'My Quiz';
+        $quiz->passing_score = 80;
+
+        try {
+            $quiz->save();
+            $this->fail('Expected the save to throw');
+        } catch (\RuntimeException $e) {
+            $this->assertSame('boom', $e->getMessage());
+        }
+
+        $this->assertEquals(80, $quiz->passing_score);
+        $this->assertEquals('My Quiz', $quiz->title);
+    }
+
+    public function testLatestDoesNotThrowAmbiguousColumnWithSubtypeJoin(): void
+    {
+        // A physical created_at on the subtype table that is NOT a subtype
+        // attribute escapes overlap validation
+        DB::statement('ALTER TABLE assessment_quiz ADD COLUMN created_at timestamp');
+
+        DB::table('assessment')->insert([
+            ['id' => 1, 'type_id' => 1, 'title' => 'Old', 'enabled' => true, 'created_at' => '2026-01-01 00:00:00'],
+            ['id' => 2, 'type_id' => 1, 'title' => 'New', 'enabled' => true, 'created_at' => '2026-02-01 00:00:00'],
+        ]);
+        DB::table('assessment_quiz')->insert([
+            ['assessment_id' => 1, 'passing_score' => 50, 'time_limit' => 30, 'show_correct_answers' => false],
+            ['assessment_id' => 2, 'passing_score' => 80, 'time_limit' => 30, 'show_correct_answers' => false],
+        ]);
+
+        // where() on a subtype column triggers the join; latest() must then
+        // qualify created_at to avoid an ambiguous column error
+        $quiz = Quiz::where('passing_score', '>', 0)->latest()->first();
+
+        $this->assertNotNull($quiz);
+        $this->assertEquals(2, $quiz->id);
+
+        $oldest = Quiz::where('passing_score', '>', 0)->oldest()->first();
+
+        $this->assertNotNull($oldest);
+        $this->assertEquals(1, $oldest->id);
     }
 }
 

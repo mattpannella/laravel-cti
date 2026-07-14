@@ -47,7 +47,9 @@ trait BootsSubtypeModel
             try {
                 $ctiParentClass = new $ctiParentClass();
                 $discriminatorColumn = $ctiParentClass->getSubtypeKey();
-                if (empty($model->getAttribute($discriminatorColumn))) {
+                $discriminatorValue = $model->getAttribute($discriminatorColumn);
+                //only autoassign when unset. 0 and '0' are legitimate discriminator values
+                if ($discriminatorValue === null || $discriminatorValue === '') {
                     // Use cached type ID if available
                     if (isset(static::$creatingTypeIdCache[$modelClass])) {
                         $model->setAttribute($discriminatorColumn, static::$creatingTypeIdCache[$modelClass]);

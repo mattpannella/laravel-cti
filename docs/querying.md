@@ -73,7 +73,7 @@ The join is only added once per query, regardless of how many subtype columns yo
 
 ## Mass Updates
 
-Mass `update()`, `increment()`, and `decrement()` calls automatically split values between the parent and subtype tables.
+Mass `update()`, `increment()`, and `decrement()` calls automatically split values between the parent and subtype tables. When both tables are involved, the writes run inside a database transaction, so a failure on either side causes a roll back.
 
 ### update()
 
@@ -87,7 +87,7 @@ Quiz::where('passing_score', '<', 60)->update([
 ]);
 ```
 
-For the subtype update, the builder first collects the IDs of matching parent rows, then updates the subtype table using those IDs. If you're only updating parent columns, the subtype table is not touched, and vice versa.
+For the subtype update, the builder first collects the IDs of matching parent rows (before the parent update runs, so a where clause that references a column being updated still targets the right rows), then updates the subtype table using those IDs. If you're only updating parent columns, the subtype table is not touched, and vice versa.
 
 ### increment() and decrement()
 

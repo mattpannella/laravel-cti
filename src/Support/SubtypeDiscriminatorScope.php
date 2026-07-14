@@ -19,8 +19,11 @@ class SubtypeDiscriminatorScope implements Scope
 {
     /**
      * Cache of resolved type IDs per model class.
-     * 
-     * @var array<class-string, int|string|null>
+     * Only successful (non-null) resolutions are cached, so a failed
+     * resolution is retried on the next query instead of pinning the
+     * scope to an empty result set for the life of the process.
+     *
+     * @var array<class-string, int|string>
      */
     protected static array $typeIdCache = [];
 
@@ -75,20 +78,18 @@ class SubtypeDiscriminatorScope implements Scope
 
         try {
             $ctiParentClass = $model->getCtiParentClass();
-            
+
             if (!$ctiParentClass || !class_exists($ctiParentClass)) {
-                static::$typeIdCache[$modelClass] = null;
                 return null;
             }
 
             $parentInstance = new $ctiParentClass();
             $subtypeMap = $parentInstance->getSubtypeMap();
-            
+
             // Find the label for this model class in the subtype map
             $label = array_search($modelClass, $subtypeMap, true);
-            
+
             if ($label === false) {
-                static::$typeIdCache[$modelClass] = null;
                 return null;
             }
 
@@ -107,11 +108,13 @@ class SubtypeDiscriminatorScope implements Scope
                 ->where($lookupLabelCol, $label)
                 ->value($lookupKeyCol);
 
-            static::$typeIdCache[$modelClass] = $typeId;
+            if ($typeId !== null) {
+                static::$typeIdCache[$modelClass] = $typeId;
+            }
+
             return $typeId;
         } catch (QueryException $e) {
-            // Table doesn't exist yet (e.g. during migrations) — cache null
-            static::$typeIdCache[$modelClass] = null;
+            // Table doesn't exist yet (e.g. during migrations) — don't cache, retry on next query
             return null;
         } catch (SubtypeException $e) {
             throw $e;

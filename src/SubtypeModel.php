@@ -148,12 +148,6 @@ abstract class SubtypeModel extends Model
             //capture pre-save existence so we can force a subtype write on insert
             $wasExisting = $this->exists;
 
-            //split dirty attributes
-            $dirtyParentAttributes = array_intersect_key(
-                $dirtyAttributes,
-                $this->getParentAttributes()
-            );
-
             $dirtySubtypeAttributes = array_intersect_key(
                 $dirtyAttributes,
                 array_flip($this->getSubtypeAttributes())
@@ -162,7 +156,15 @@ abstract class SubtypeModel extends Model
             //force save parent record even if only subtype attributes are dirty
             //this ensures we have a primary key for the subtype record
             $this->attributes = $this->getParentAttributes();
-            $saved = parent::save($options);
+
+            try {
+                $saved = parent::save($options);
+            } catch (\Throwable $e) {
+                //restore full attribute set so the model isn't left holding
+                //only parent attributes when the save throws
+                $this->attributes = $originalAttributesArray;
+                throw $e;
+            }
 
             if ($saved) {
                 //capture all parent attributes after save (includes timestamps, auto-increment ID, etc.)
@@ -212,7 +214,7 @@ abstract class SubtypeModel extends Model
             $keyName = $this->getSubtypeKeyName();
             $key = $this->getKey();
 
-            if (!$key) {
+            if ($key === null) {
                 throw SubtypeException::missingTypeId(static::class);
             }
 
@@ -256,7 +258,7 @@ abstract class SubtypeModel extends Model
                 $subtypeTable = $this->getSubtypeTable();
                 if ($this->exists && $subtypeTable && !$isSoftDeleting) {
                     $keyName = $this->getSubtypeKeyName();
-                    if (!$this->getKey()) {
+                    if ($this->getKey() === null) {
                         throw SubtypeException::missingTypeId(static::class);
                     }
 
@@ -302,7 +304,7 @@ abstract class SubtypeModel extends Model
             $keyName = $this->getSubtypeKeyName();
             $key = $this->getKey();
 
-            if (!$key) {
+            if ($key === null) {
                 throw SubtypeException::missingTypeId(static::class);
             }
 
@@ -392,6 +394,10 @@ abstract class SubtypeModel extends Model
             // Container not available — use default
         }
 
+        //track the missing row regardless of strategy so isSubtypeDataMissing()
+        //is reliable under every configuration
+        $instance->subtypeDataMissing = true;
+
         switch ($strategy) {
             case 'exception':
                 throw SubtypeException::missingSubtypeData($model, $key);
@@ -403,7 +409,6 @@ abstract class SubtypeModel extends Model
                         // Log facade not available (e.g. outside Laravel app)
                     }
                 }
-                $instance->subtypeDataMissing = true;
                 break;
             case 'null':
             default:
@@ -545,7 +550,7 @@ abstract class SubtypeModel extends Model
         $instance = parent::newInstance($attributes, $exists);
 
         //if this is an existing record and subtype data hasn't been batch-loaded, load it
-        if ($exists && $instance->getKey() && !$instance->isSubtypeDataLoaded()) {
+        if ($exists && $instance->getKey() !== null && !$instance->isSubtypeDataLoaded()) {
             $instance->loadSubtypeData();
         }
 

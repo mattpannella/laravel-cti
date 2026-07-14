@@ -52,7 +52,7 @@ class SubtypedCollection extends Collection
             if (
                 $model instanceof SubtypeModel
                 && $model->getSubtypeTable()
-                && $model->getKey()
+                && $model->getKey() !== null
             ) {
                 if (!$model->isSubtypeDataLoaded()) {
                     $grouped[get_class($model)][] = $model;

@@ -42,9 +42,9 @@ trait HasSubtypes
 
         $subtypeKey = $this->getSubtypeKey();
         $typeId = data_get($attributes, $subtypeKey);
-        $label = $typeId ? static::resolveSubtypeLabel($typeId) : null;
+        $label = static::resolveSubtypeLabel($typeId);
         $subtypeMap = $this->getSubtypeMap();
-        $subclass = $label ? $subtypeMap[$label] ?? null : null;
+        $subclass = $label !== null ? $subtypeMap[$label] ?? null : null;
 
         if ($subclass && class_exists($subclass)) {
             // Create subtype instance with parent's casts applied
@@ -74,13 +74,14 @@ trait HasSubtypes
      * batch-loads all rows from the lookup table on first access to avoid
      * N+1 queries when resolving multiple subtypes.
      *
-     * @param int|string $typeId The type identifier to resolve
+     * @param int|string|null $typeId The type identifier to resolve
      * @return string|null The resolved type label or null if not found
      * @throws SubtypeException When lookup table is not configured or resolution fails
      */
-    public static function resolveSubtypeLabel(int|string $typeId): ?string
+    public static function resolveSubtypeLabel(int|string|null $typeId): ?string
     {
-        if (!$typeId) {
+        //null and empty string mean "no type". 0 and '0' are legitimate type ids
+        if ($typeId === null || $typeId === '') {
             return null;
         }
 
@@ -125,7 +126,7 @@ trait HasSubtypes
 
             $label = $cache[$typeId] ?? null;
 
-            if (!$label) {
+            if ($label === null) {
                 throw SubtypeException::invalidSubtype((string) $typeId);
             }
 
